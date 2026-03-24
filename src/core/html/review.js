@@ -447,31 +447,20 @@ body::after {
   z-index: 2;
 }
 
-/* --- TOC toggle --- */
+/* --- TOC toggle (leftmost in topbar) --- */
 .toc-toggle {
-  position: fixed;
-  left: 188px;
-  bottom: 48px;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bar-bg);
-  border: 1px solid var(--border);
-  border-radius: 3px;
+  background: none;
+  border: none;
   color: var(--fg-faint);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1;
   cursor: pointer;
-  z-index: 12;
-  transition: left 0.15s ease, color 0.1s, border-color 0.1s;
-  padding: 0;
+  padding: 2px 4px;
+  margin-right: 8px;
+  transition: color 0.1s;
+  flex-shrink: 0;
 }
-.toc-toggle:hover { color: var(--fg-dim); border-color: var(--border-focus); }
-.toc-toggle-icon { transition: transform 0.15s ease; display: block; }
-body.no-toc .toc-toggle { left: 6px; }
-body.no-toc .toc-toggle-icon { transform: rotate(180deg); }
+.toc-toggle:hover { color: var(--fg-bold); }
 
 /* No TOC */
 body.no-toc { grid-template-columns: 0px 1fr; }
@@ -486,6 +475,7 @@ body.no-toc-empty .toc-toggle { display: none; }
 
 <div class="topbar">
   <div class="topbar-left">
+    <button class="toc-toggle" id="toc-toggle" type="button" title="Toggle sidebar ([)">\u2261</button>
     <div class="title">Review: ${escapeHtml(title)}</div>
     ${description ? `<div class="desc">${escapeHtml(description)}</div>` : ""}
   </div>
@@ -497,7 +487,6 @@ body.no-toc-empty .toc-toggle { display: none; }
 </div>
 
 <nav class="toc" id="toc"></nav>
-<button class="toc-toggle" id="toc-toggle" type="button" title="Toggle sidebar ([)"><span class="toc-toggle-icon">\u2039</span></button>
 
 <div class="scroll-area" id="scroll-area">
   <div class="content-col" id="content-col">
