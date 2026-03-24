@@ -2,7 +2,7 @@
 
 Browser-based UI companion for terminal coding agents.
 
-When the terminal isn't enough — complex forms, document reviews, structured approvals — the agent opens an **atrium**: a light-filled browser page where you can see, think, and respond. Then you step back into the terminal.
+When the terminal isn't enough — complex forms, document reviews, structured approvals — the agent opens a browser page where you can see, think, and respond. Then you step back into the terminal.
 
 ## Primitives
 
@@ -21,7 +21,7 @@ Add to your Claude Code MCP config:
 ```json
 {
   "mcpServers": {
-    "atrium": {
+    "centaur": {
       "command": "node",
       "args": ["/path/to/centaur/bin/mcp-server.js"]
     }
@@ -65,7 +65,7 @@ The **core** is agent-agnostic — pure Node.js, zero framework dependencies. Ea
 ## Project Structure
 
 ```
-atrium/
+centaur/
 ├── src/
 │   ├── core/                 # Agent-agnostic
 │   │   ├── form.js           # openForm(config) → Promise<answers>
@@ -90,6 +90,4 @@ atrium/
 
 ## Name
 
-A centaur is the light-filled central space in a building. Open to the sky, everything passes through it. Nobody lives there — you step in, orient yourself, handle what needs handling, and move on.
-
-That's this tool. The terminal is where you live. The centaur is where you step out for a moment when you need more space.
+A centaur is half human, half horse — two natures fused into one creature that's stronger than either alone. That's the idea here: the terminal is where the agent lives, the browser is where the human thinks. Centaur fuses them.

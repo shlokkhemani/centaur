@@ -1,5 +1,5 @@
 /**
- * Atrium — Pi extension adapter
+ * Centaur — Pi extension adapter
  *
  * Registers browser-based UI primitives as pi tools.
  * The core (HTML builders + transport) is shared with the MCP adapter.
@@ -31,7 +31,7 @@ const QuestionSchema = Type.Object({
 
 // --- Extension ---
 
-export default function atrium(pi: ExtensionAPI) {
+export default function centaur(pi: ExtensionAPI) {
   // --- ask_questions ---
 
   pi.registerTool({
