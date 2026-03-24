@@ -69,6 +69,7 @@ body {
   display: grid;
   grid-template-rows: auto 1fr auto;
   grid-template-columns: 200px 1fr;
+  transition: grid-template-columns 0.15s ease;
 }
 
 /* --- Top bar --- */
@@ -106,8 +107,11 @@ body {
   grid-row: 2;
   grid-column: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   border-right: 1px solid var(--border);
   padding: 12px 0;
+  min-width: 0;
+  transition: opacity 0.15s ease;
 }
 .toc-link {
   display: block;
@@ -443,9 +447,12 @@ body::after {
   z-index: 2;
 }
 
-/* No TOC fallback */
-body.no-toc { grid-template-columns: 1fr; }
-body.no-toc .toc { display: none; }
+/* No TOC */
+body.no-toc { grid-template-columns: 0px 1fr; }
+body.no-toc .toc { opacity: 0; pointer-events: none; border-right-color: transparent; }
+/* When there are literally no headings, skip the column entirely */
+body.no-toc-empty { grid-template-columns: 1fr; }
+body.no-toc-empty .toc { display: none; }
 </style>
 </head>
 <body>
@@ -457,6 +464,7 @@ body.no-toc .toc { display: none; }
   </div>
   <div class="topbar-right">
     <span class="meta" id="comment-count-top" aria-live="polite">0 comments</span>
+    <button class="btn" id="toc-toggle" type="button" title="Toggle sidebar ([)">\u2261</button>
     <button class="btn" id="toggle" type="button">dark</button>
     <button class="btn" id="sub-top" type="button">Submit</button>
   </div>
@@ -480,7 +488,7 @@ body.no-toc .toc { display: none; }
 </div>
 
 <div class="botbar">
-  <span class="kbd">\u2318\u21B5 submit \u00b7 c comment \u00b7 n/p next/prev \u00b7 e edit \u00b7 d delete</span>
+  <span class="kbd">\u2318\u21B5 submit \u00b7 c comment \u00b7 n/p next/prev \u00b7 e edit \u00b7 d delete \u00b7 [ sidebar</span>
   <button class="btn" id="sub" type="button">Submit</button>
 </div>
 
@@ -568,6 +576,18 @@ body.no-toc .toc { display: none; }
   });
   try { const saved = localStorage.getItem("wft"); if (saved) setTheme(saved); } catch(e) {}
 
+  // --- TOC toggle ---
+  const tocToggle = document.getElementById("toc-toggle");
+  let tocHidden = false;
+  function setTocVisible(show) {
+    tocHidden = !show;
+    document.body.classList.toggle("no-toc", tocHidden);
+    try { localStorage.setItem("wft-toc", tocHidden ? "0" : "1"); } catch(e) {}
+    setTimeout(positionCards, 160);
+  }
+  tocToggle.addEventListener("click", function() { setTocVisible(tocHidden); });
+  try { if (localStorage.getItem("wft-toc") === "0") setTocVisible(false); } catch(e) {}
+
   // --- Suppress contenteditable mutations ---
   contentEl.addEventListener("beforeinput", function(e) { e.preventDefault(); });
   contentEl.addEventListener("paste", function(e) { e.preventDefault(); });
@@ -608,7 +628,7 @@ body.no-toc .toc { display: none; }
   // --- TOC ---
   (function buildToc() {
     const headers = contentEl.querySelectorAll("h1,h2,h3,h4,h5,h6");
-    if (!headers.length) { document.body.classList.add("no-toc"); return; }
+    if (!headers.length) { document.body.classList.add("no-toc-empty"); tocToggle.hidden = true; return; }
     let html = "";
     headers.forEach(function(h) {
       const level = parseInt(h.tagName[1]);
@@ -1345,6 +1365,11 @@ body.no-toc .toc { display: none; }
         deleteComment(activeCommentId);
         contentEl.focus();
       }
+    }
+
+    if (e.key === "[" && !e.metaKey && !e.ctrlKey && !e.altKey && !inTextarea && !inCardEdit) {
+      e.preventDefault();
+      setTocVisible(tocHidden);
     }
 
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
