@@ -447,12 +447,39 @@ body::after {
   z-index: 2;
 }
 
+/* --- TOC toggle --- */
+.toc-toggle {
+  position: fixed;
+  left: 188px;
+  bottom: 48px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bar-bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg-faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 12;
+  transition: left 0.15s ease, color 0.1s, border-color 0.1s;
+  padding: 0;
+}
+.toc-toggle:hover { color: var(--fg-dim); border-color: var(--border-focus); }
+.toc-toggle-icon { transition: transform 0.15s ease; display: block; }
+body.no-toc .toc-toggle { left: 6px; }
+body.no-toc .toc-toggle-icon { transform: rotate(180deg); }
+
 /* No TOC */
 body.no-toc { grid-template-columns: 0px 1fr; }
 body.no-toc .toc { opacity: 0; pointer-events: none; border-right-color: transparent; }
 /* When there are literally no headings, skip the column entirely */
 body.no-toc-empty { grid-template-columns: 1fr; }
 body.no-toc-empty .toc { display: none; }
+body.no-toc-empty .toc-toggle { display: none; }
 </style>
 </head>
 <body>
@@ -464,13 +491,13 @@ body.no-toc-empty .toc { display: none; }
   </div>
   <div class="topbar-right">
     <span class="meta" id="comment-count-top" aria-live="polite">0 comments</span>
-    <button class="btn" id="toc-toggle" type="button" title="Toggle sidebar ([)">\u2261</button>
     <button class="btn" id="toggle" type="button">dark</button>
     <button class="btn" id="sub-top" type="button">Submit</button>
   </div>
 </div>
 
 <nav class="toc" id="toc"></nav>
+<button class="toc-toggle" id="toc-toggle" type="button" title="Toggle sidebar ([)"><span class="toc-toggle-icon">\u2039</span></button>
 
 <div class="scroll-area" id="scroll-area">
   <div class="content-col" id="content-col">
