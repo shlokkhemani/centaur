@@ -97,7 +97,8 @@ export const toolDefinitions = [
     label: "Respond To Review",
     description:
       "Sends an answer or edit proposal back to an active review session and waits for the next review interaction. " +
-      "Use this after review_document returns status='question' or status='edit_request'.",
+      "Use this after review_document returns status='question' or status='edit_request'. " +
+      "Keep answers concise: a few sentences is ideal unless the user's question requires depth.",
     input: objectField({
       session_id: stringField("Active review session ID"),
       interaction_id: stringField("Interaction ID returned by review_document"),

@@ -37,7 +37,7 @@ html[data-theme="dark"] {
   --btn-active: #2a2a2a;
   --bar-bg: #1a1a1a;
   --overlay-bg: rgba(0,0,0,0.7);
-  --hl-bg: rgba(136,136,136,0.2);
+  --hl-bg: rgba(160,160,160,0.25);
   --card-bg: #1e1e1e;
 }
 html[data-theme="light"] {
@@ -156,7 +156,7 @@ body {
   caret-color: var(--fg-bold);
 }
 #md-content:focus { outline: none; }
-#md-content::selection { background: var(--hl-bg); }
+#md-content::selection { background: rgba(140,140,140,0.35); color: inherit; }
 #md-content > *:last-child { margin-bottom: 0; }
 
 /* Headings — generous top space separates sections, moderate bottom anchors to content */
@@ -204,11 +204,17 @@ body {
 /* --- Highlights --- */
 mark.hl {
   background: var(--hl-bg);
+  color: inherit;
   border-radius: 2px;
   position: relative;
   cursor: pointer;
 }
 mark.hl.hl-active { background: rgba(136,136,136,0.35); }
+mark.hl-pending {
+  background: var(--hl-bg);
+  color: inherit;
+  border-radius: 2px;
+}
 .badge {
   display: inline-block;
   background: var(--accent);
@@ -239,7 +245,23 @@ mark.hl.hl-active { background: rgba(136,136,136,0.35); }
 }
 .margin-card.active {
   border-color: var(--border-focus);
-  background: var(--hl-bg);
+}
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+.card-head-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+.card-head .badge {
+  flex-shrink: 0;
+  margin-right: 0;
 }
 .card-quote {
   color: var(--fg-faint);
@@ -247,81 +269,143 @@ mark.hl.hl-active { background: rgba(136,136,136,0.35); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
   padding-bottom: 4px;
   margin-bottom: 4px;
   border-bottom: 1px solid var(--border);
   font-size: 10px;
 }
-.card-body { color: var(--fg); word-break: break-word; }
-.card-kind {
-  color: var(--fg-dim);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 4px;
-}
-.card-answer {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border);
-  color: var(--fg);
-  white-space: pre-wrap;
-}
-.card-loading {
-  margin-top: 6px;
-  color: var(--fg-dim);
-  font-style: italic;
-}
-.card-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 2px;
-  margin-top: 6px;
-}
-.card-btn {
+.card-toggle {
   background: none;
-  border: 1px solid transparent;
-  border-radius: 3px;
+  border: none;
   color: var(--fg-ghost);
   cursor: pointer;
   font: inherit;
   font-size: 11px;
-  padding: 3px 6px;
   line-height: 1;
-  transition: color 0.15s, border-color 0.15s;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  flex-shrink: 0;
+  border-radius: 3px;
 }
-.card-btn:hover { color: var(--fg-dim); border-color: var(--border); }
-.card-btn.card-delete:hover { color: var(--err); border-color: var(--err); }
+.card-toggle:hover { color: var(--fg-dim); background: var(--hl-bg); }
+.card-body {
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-top: 4px;
+}
+.card-collapsed-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  cursor: pointer;
+}
+.card-collapsed-text,
+.card-collapsed-meta {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-collapsed-text {
+  min-width: 0;
+  color: var(--fg);
+  flex: 1;
+}
+.card-collapsed-meta {
+  color: var(--fg-faint);
+  flex-shrink: 0;
+}
+.thread-group + .thread-group {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.thread-question {
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-top: 6px;
+}
+.thread-note {
+  color: var(--fg-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-top: 6px;
+}
+.thread-answer,
+.card-loading {
+  margin-top: 6px;
+  margin-left: 12px;
+  color: var(--fg-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.card-followup {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--fg-ghost);
+  font-size: 11px;
+}
+.action-sep {
+  color: var(--fg-ghost);
+}
+.text-action {
+  background: none;
+  border: none;
+  color: var(--fg-ghost);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.text-action:hover { color: var(--fg-dim); }
+.text-action.primary {
+  color: var(--fg-dim);
+}
+.text-action.primary:hover {
+  color: var(--fg-bold);
+}
+.text-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.text-action.action-delete:hover { color: var(--err); }
+.followup-trigger {
+  margin-top: 8px;
+  color: var(--fg-ghost);
+  cursor: pointer;
+  font-size: 11px;
+}
+.followup-trigger:hover { color: var(--fg-dim); }
 
 /* Card edit mode */
 .card-edit-area {
   width: 100%;
-  padding: 4px 6px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: 3px;
+  padding: 0 0 6px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
   color: var(--fg);
   font: inherit;
   font-size: 11px;
   resize: vertical;
-  min-height: 60px;
+  min-height: 44px;
   max-height: 300px;
   overflow-y: auto;
-  margin-bottom: 4px;
+  margin-top: 6px;
 }
-.card-edit-area:focus { outline: 2px solid var(--border-focus); outline-offset: 1px; border-color: var(--border-focus); }
-.card-edit-actions { display: flex; justify-content: flex-end; gap: 2px; }
-.card-edit-actions .btn {
-  padding: 3px 10px;
-  font-size: 10px;
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--fg-dim);
-  border-radius: 3px;
-  transition: color 0.15s, border-color 0.15s;
-}
-.card-edit-actions .btn:hover { color: var(--fg-bold); border-color: var(--border-focus); background: none; }
-.card-edit-actions .btn:active { background: none; }
+.card-edit-area:focus { outline: none; border-bottom-color: var(--border-focus); }
 
 /* --- Section dividers --- */
 .section-divider {
@@ -340,20 +424,20 @@ mark.hl.hl-active { background: rgba(136,136,136,0.35); }
   background: var(--border);
 }
 
-/* --- Comment summary items --- */
-.comment-item {
+/* --- Annotation summary items --- */
+.annotation-item {
   padding: 6px 0;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   font-size: 12px;
 }
-.comment-item:last-child { border-bottom: none; }
-.comment-item:hover { background: var(--hl-bg); margin: 0 -6px; padding: 6px 6px; border-radius: 3px; }
-.comment-header { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.comment-section { color: var(--fg-dim); }
-.comment-quote { color: var(--fg-faint); font-style: italic; }
-.comment-body { padding-left: 20px; color: var(--fg); margin-top: 2px; }
-.comment-answer { padding-left: 20px; color: var(--fg-dim); margin-top: 4px; white-space: pre-wrap; }
+.annotation-item:last-child { border-bottom: none; }
+.annotation-item:hover { background: var(--hl-bg); margin: 0 -6px; padding: 6px 6px; border-radius: 3px; }
+.annotation-header { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.annotation-section { color: var(--fg-dim); }
+.annotation-quote { color: var(--fg-faint); font-style: italic; }
+.annotation-body { padding-left: 20px; color: var(--fg); margin-top: 2px; }
+.annotation-answer { padding-left: 20px; color: var(--fg-dim); margin-top: 4px; white-space: pre-wrap; }
 
 /* --- Feedback --- */
 .feedback-section { padding-bottom: 20px; }
@@ -379,31 +463,11 @@ mark.hl.hl-active { background: rgba(136,136,136,0.35); }
   z-index: 50;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 0;
+  padding: 10px;
+  width: 320px;
 }
 .popup.visible { display: block; }
-.popup-mode-buttons {
-  display: flex;
-  gap: 6px;
-  padding: 10px;
-}
-.popup-trigger {
-  display: block;
-  padding: 4px 10px;
-  background: var(--btn-bg);
-  color: var(--fg-bold);
-  border: none;
-  border-radius: 3px;
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-.popup-trigger:hover { background: var(--btn-hover); }
-.popup-trigger:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.popup-form { padding: 10px; width: 320px; }
 .popup-quote {
   font-size: 11px;
   color: var(--fg-dim);
@@ -427,8 +491,12 @@ mark.hl.hl-active { background: rgba(136,136,136,0.35); }
   resize: none;
   margin-bottom: 8px;
 }
-.popup-text:focus { outline: 2px solid var(--border-focus); outline-offset: 1px; border-color: var(--border-focus); }
-.popup-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.popup-text:focus { outline: none; border-color: var(--border-focus); }
+.popup-actions { display: flex; align-items: center; gap: 4px; }
+.popup-actions .btn { background: none; border: none; color: var(--fg-faint); font-size: 11px; padding: 3px 8px; border-radius: 3px; }
+.popup-actions .btn:hover { color: var(--fg-dim); background: var(--hl-bg); }
+.popup-btn-cancel { }
+.popup-btn-primary { color: var(--fg-dim) !important; }
 
 /* --- Bottom bar --- */
 .botbar {
@@ -509,7 +577,7 @@ body.no-toc-empty .toc-toggle { display: none; }
     ${description ? `<div class="desc">${escapeHtml(description)}</div>` : ""}
   </div>
   <div class="topbar-right">
-    <span class="meta" id="comment-count-top" aria-live="polite">0 comments</span>
+    <span class="meta" id="annotation-count-top" aria-live="polite">0 annotations</span>
     <button class="btn" id="toggle" type="button">dark</button>
     <button class="btn" id="sub-top" type="button">Submit</button>
   </div>
@@ -520,13 +588,9 @@ body.no-toc-empty .toc-toggle { display: none; }
 <div class="scroll-area" id="scroll-area">
   <div class="content-col" id="content-col">
     <div id="md-content" contenteditable="plaintext-only" aria-label="Document content" spellcheck="false"></div>
-    <div id="comments-section" hidden>
-      <div class="section-divider"><span>Comments (<span id="comment-count">0</span>)</span></div>
-      <div id="comments-list"></div>
-    </div>
-    <div id="questions-section" hidden>
-      <div class="section-divider"><span>Questions (<span id="question-count">0</span>)</span></div>
-      <div id="questions-list"></div>
+    <div id="annotations-section" hidden>
+      <div class="section-divider"><span>Annotations (<span id="annotation-count">0</span>)</span></div>
+      <div id="annotations-list"></div>
     </div>
     <div class="feedback-section">
       <div class="section-divider"><span>Anything else?</span></div>
@@ -537,22 +601,18 @@ body.no-toc-empty .toc-toggle { display: none; }
 </div>
 
 <div class="botbar">
-  <span class="kbd">\u2318\u21B5 submit \u00b7 c comment \u00b7 a ask \u00b7 n/p next/prev \u00b7 e edit \u00b7 d delete \u00b7 [ sidebar</span>
+  <span class="kbd">\u2318\u21B5 submit \u00b7 c/a annotate \u00b7 n/p next/prev \u00b7 e edit \u00b7 d delete \u00b7 [ sidebar</span>
   <button class="btn" id="sub" type="button">Submit</button>
 </div>
 
-<div id="popup" class="popup">
-  <div class="popup-mode-buttons" id="popup-mode-buttons">
-    <button id="popup-comment-btn" class="popup-trigger" type="button">Comment</button>
-    <button id="popup-ask-btn" class="popup-trigger" type="button">Ask</button>
-  </div>
-  <div id="popup-form" class="popup-form" hidden>
-    <div class="popup-quote" id="popup-quote"></div>
-    <textarea class="popup-text" id="popup-text" rows="2" placeholder="Your thought\u2026"></textarea>
-    <div class="popup-actions">
-      <button class="btn" id="popup-cancel" type="button">Cancel</button>
-      <button class="btn" id="popup-submit" type="button">Add</button>
-    </div>
+  <div id="popup" class="popup">
+  <div class="popup-quote" id="popup-quote"></div>
+  <textarea class="popup-text" id="popup-text" rows="2" placeholder="Write a note or question\u2026"></textarea>
+  <div class="popup-actions">
+    <button class="btn popup-btn-cancel" id="popup-cancel" type="button">Cancel</button>
+    <span style="flex:1"></span>
+    <button class="btn" id="popup-ask-action" type="button">Ask \u2318\u21B5</button>
+    <button class="btn popup-btn-primary" id="popup-comment-action" type="button">Comment \u21B5</button>
   </div>
 </div>
 
@@ -580,21 +640,15 @@ body.no-toc-empty .toc-toggle { display: none; }
   const scrollArea = document.getElementById("scroll-area");
   const marginCol = document.getElementById("margin-col");
   const popup = document.getElementById("popup");
-  const popupModeButtons = document.getElementById("popup-mode-buttons");
-  const popupCommentBtn = document.getElementById("popup-comment-btn");
-  const popupAskBtn = document.getElementById("popup-ask-btn");
-  const popupForm = document.getElementById("popup-form");
   const popupQuote = document.getElementById("popup-quote");
   const popupText = document.getElementById("popup-text");
-  const popupSubmit = document.getElementById("popup-submit");
+  const popupCommentAction = document.getElementById("popup-comment-action");
+  const popupAskAction = document.getElementById("popup-ask-action");
   const popupCancel = document.getElementById("popup-cancel");
-  const commentsList = document.getElementById("comments-list");
-  const commentsSection = document.getElementById("comments-section");
-  const commentCountEl = document.getElementById("comment-count");
-  const commentCountTop = document.getElementById("comment-count-top");
-  const questionsList = document.getElementById("questions-list");
-  const questionsSection = document.getElementById("questions-section");
-  const questionCountEl = document.getElementById("question-count");
+  const annotationsList = document.getElementById("annotations-list");
+  const annotationsSection = document.getElementById("annotations-section");
+  const annotationCountEl = document.getElementById("annotation-count");
+  const annotationCountTop = document.getElementById("annotation-count-top");
   const generalFeedback = document.getElementById("general-feedback");
   const overlay = document.getElementById("overlay");
   const toggle = document.getElementById("toggle");
@@ -607,7 +661,6 @@ body.no-toc-empty .toc-toggle { display: none; }
   let sent = false;
   let currentRange = null;
   let activeInteractionId = null;
-  let popupMode = "comment";
   let pendingInteractionId = hydration.pending_interaction_id || null;
   let feedbackSyncTimer = null;
   let eventSource = null;
@@ -668,17 +721,172 @@ body.no-toc-empty .toc-toggle { display: none; }
       anchor: normalizeAnchor(comment && comment.anchor),
       comment: String(comment && comment.comment || ""),
       _editing: false,
+      _collapsed: false,
+    };
+  }
+
+  function normalizeThreadEntry(entry, fallbackInteractionId) {
+    const kind = entry && entry.kind === "note" ? "note" : "question";
+    return {
+      interaction_id: String(entry && entry.interaction_id || fallbackInteractionId || makeId("question")),
+      parent_interaction_id: entry && entry.parent_interaction_id
+        ? String(entry.parent_interaction_id)
+        : null,
+      kind: kind,
+      question: kind === "question" ? String(entry && (entry.question || entry.content) || "") : "",
+      content: kind === "note" ? String(entry && (entry.content || entry.question) || "") : "",
+      answer: kind === "question" ? String(entry && entry.answer || "") : "",
     };
   }
 
   function normalizeQuestion(question) {
+    const entries = Array.isArray(question && question.thread) && question.thread.length
+      ? question.thread.map(function(entry, index) {
+          return normalizeThreadEntry(
+            entry,
+            question && question.interaction_id && index === 0 ? question.interaction_id : null
+          );
+        })
+      : [normalizeThreadEntry(question, question && question.interaction_id)];
+    const interactionId = String(question && question.interaction_id || entries[0].interaction_id);
+    entries[0].interaction_id = interactionId;
+    entries[0].parent_interaction_id = null;
+
     return {
-      interaction_id: String(question && question.interaction_id || makeId("question")),
+      interaction_id: interactionId,
       badge_label: String(question && question.badge_label || ("Q" + nextQuestionNumber++)),
       anchor: normalizeAnchor(question && question.anchor),
-      question: String(question && question.question || ""),
-      answer: String(question && question.answer || ""),
+      thread: entries,
+      _collapsed: false,
+      _composerOpen: false,
+      _composerValue: "",
     };
+  }
+
+  function getThreadEntryText(entry) {
+    if (!entry) return "";
+    return entry.kind === "note" ? String(entry.content || "") : String(entry.question || "");
+  }
+
+  function getFirstQuestionEntry(questionThread) {
+    if (!questionThread || !Array.isArray(questionThread.thread)) return null;
+    return questionThread.thread.find(function(entry) {
+      return entry.kind === "question";
+    }) || questionThread.thread[0] || null;
+  }
+
+  function getThreadMessageCount(questionThread) {
+    if (!questionThread || !Array.isArray(questionThread.thread)) return 0;
+    return questionThread.thread.reduce(function(total, entry) {
+      if (entry.kind === "note") return total + 1;
+      return total + 1 + (entry.answer ? 1 : 0);
+    }, 0);
+  }
+
+  function isQuestionThreadPending(questionThread) {
+    if (!questionThread || !Array.isArray(questionThread.thread)) return false;
+    return questionThread.thread.some(function(entry) {
+      return entry.kind === "question" && !entry.answer;
+    });
+  }
+
+  function getQuestionThreadById(interactionId) {
+    return questions.find(function(question) { return question.interaction_id === interactionId; }) || null;
+  }
+
+  function getQuestionThreadByEntryId(interactionId) {
+    return questions.find(function(question) {
+      return question.thread.some(function(entry) { return entry.interaction_id === interactionId; });
+    }) || null;
+  }
+
+  function getQuestionEntryById(interactionId) {
+    const questionThread = getQuestionThreadByEntryId(interactionId);
+    if (!questionThread) return null;
+    return questionThread.thread.find(function(entry) {
+      return entry.interaction_id === interactionId;
+    }) || null;
+  }
+
+  function normalizeQuestions(questionList) {
+    const normalizedInput = Array.isArray(questionList) ? questionList : [];
+    const normalized = [];
+    const threadedQuestions = [];
+    const flatEntries = [];
+    const entryById = {};
+    const rawById = {};
+
+    normalizedInput.forEach(function(rawQuestion, index) {
+      if (rawQuestion && Array.isArray(rawQuestion.thread)) {
+        threadedQuestions.push(rawQuestion);
+        return;
+      }
+
+      const entry = normalizeThreadEntry(rawQuestion, rawQuestion && rawQuestion.interaction_id);
+      flatEntries.push({
+        entry: entry,
+        rawQuestion: rawQuestion,
+        index: index,
+      });
+      entryById[entry.interaction_id] = entry;
+      rawById[entry.interaction_id] = rawQuestion;
+    });
+
+    threadedQuestions.forEach(function(rawQuestion) {
+      normalized.push(normalizeQuestion(rawQuestion));
+    });
+
+    const groupedEntries = {};
+
+    flatEntries.forEach(function(item) {
+      const visited = {};
+      let rootId = item.entry.interaction_id;
+      let currentEntry = item.entry;
+
+      while (currentEntry.parent_interaction_id && !visited[currentEntry.interaction_id]) {
+        visited[currentEntry.interaction_id] = true;
+        rootId = currentEntry.parent_interaction_id;
+        currentEntry = entryById[currentEntry.parent_interaction_id] || null;
+      }
+
+      groupedEntries[rootId] = groupedEntries[rootId] || [];
+      groupedEntries[rootId].push({
+        entry: item.entry,
+        rawQuestion: item.rawQuestion,
+        index: item.index,
+      });
+    });
+
+    Object.keys(groupedEntries).forEach(function(rootId) {
+      const entriesForRoot = groupedEntries[rootId];
+      if (!entriesForRoot || !entriesForRoot.length) return;
+
+      entriesForRoot.sort(function(a, b) {
+        const aIsRoot = a.entry.interaction_id === rootId ? 0 : 1;
+        const bIsRoot = b.entry.interaction_id === rootId ? 0 : 1;
+        if (aIsRoot !== bIsRoot) return aIsRoot - bIsRoot;
+        return a.index - b.index;
+      });
+
+      entriesForRoot.forEach(function(item) {
+        if (item.entry.interaction_id === rootId) {
+          item.entry.parent_interaction_id = null;
+        }
+      });
+
+      const metaSource = rawById[rootId] || entriesForRoot[0].rawQuestion;
+      normalized.push({
+        interaction_id: String(rootId),
+        badge_label: String(metaSource && metaSource.badge_label || ("Q" + nextQuestionNumber++)),
+        anchor: normalizeAnchor(metaSource && metaSource.anchor),
+        thread: entriesForRoot.map(function(item) { return item.entry; }),
+        _collapsed: false,
+        _composerOpen: false,
+        _composerValue: "",
+      });
+    });
+
+    return normalized;
   }
 
   function getDocumentText() {
@@ -699,10 +907,6 @@ body.no-toc-empty .toc-toggle { display: none; }
     return comments.find(function(comment) { return comment.interaction_id === interactionId; }) || null;
   }
 
-  function getQuestionById(interactionId) {
-    return questions.find(function(question) { return question.interaction_id === interactionId; }) || null;
-  }
-
   function getActiveEditableComment() {
     if (!activeInteractionId) return null;
     return getCommentById(activeInteractionId);
@@ -721,14 +925,16 @@ body.no-toc-empty .toc-toggle { display: none; }
       });
     });
     questions.forEach(function(question) {
+      const firstEntry = getFirstQuestionEntry(question);
       items.push({
         kind: "question",
         interaction_id: question.interaction_id,
         badge_label: question.badge_label,
         anchor: question.anchor,
-        question: question.question,
-        answer: question.answer,
-        pending: pendingInteractionId === question.interaction_id && !question.answer,
+        thread: question.thread,
+        collapsed: question._collapsed === true,
+        question: firstEntry ? getThreadEntryText(firstEntry) : "",
+        pending: isQuestionThreadPending(question),
       });
     });
     items.sort(function(a, b) {
@@ -737,18 +943,12 @@ body.no-toc-empty .toc-toggle { display: none; }
     return items;
   }
 
-  function setAskDisabled() {
-    let disabledLabel = "";
-    if (reviewClosed) disabledLabel = "closed";
-    else if (pendingInteractionId) disabledLabel = "waiting";
-    else if (sseStopped) disabledLabel = "offline";
-
-    popupAskBtn.disabled = !!disabledLabel;
-    popupAskBtn.textContent = disabledLabel ? "Ask (" + disabledLabel + ")" : "Ask";
-  }
-
   function canStartAsk() {
     return !reviewClosed && !pendingInteractionId && !sseStopped;
+  }
+
+  function updatePopupActions() {
+    popupAskAction.disabled = !canStartAsk();
   }
 
   async function postEvent(payload) {
@@ -837,10 +1037,14 @@ body.no-toc-empty .toc-toggle { display: none; }
 
   function handleServerEvent(event) {
     if (event.type === "answer") {
-      const question = getQuestionById(event.interaction_id);
-      if (!question) return;
-      question.answer = String(event.content || "");
-      if (pendingInteractionId === question.interaction_id) {
+      const questionThread = getQuestionThreadByEntryId(event.interaction_id);
+      const questionEntry = getQuestionEntryById(event.interaction_id);
+      if (!questionThread || !questionEntry) return;
+      questionEntry.answer = String(event.content || "");
+      questionThread._collapsed = false;
+      questionThread._composerOpen = false;
+      questionThread._composerValue = "";
+      if (pendingInteractionId === questionEntry.interaction_id) {
         pendingInteractionId = null;
       }
       updateUI();
@@ -1163,10 +1367,7 @@ body.no-toc-empty .toc-toggle { display: none; }
       mark.classList.toggle("hl-active", mark.dataset.key === interactionId);
     });
 
-    commentsList.querySelectorAll(".comment-item").forEach(function(item) {
-      item.style.fontWeight = item.dataset.key === interactionId ? "bold" : "";
-    });
-    questionsList.querySelectorAll(".comment-item").forEach(function(item) {
+    annotationsList.querySelectorAll(".annotation-item").forEach(function(item) {
       item.style.fontWeight = item.dataset.key === interactionId ? "bold" : "";
     });
   }
@@ -1189,6 +1390,139 @@ body.no-toc-empty .toc-toggle { display: none; }
       position.card.style.top = top + "px";
       prevBottom = top + position.card.offsetHeight + 8;
     });
+
+    // Re-position after layout settles (new cards may not have height yet)
+    requestAnimationFrame(function() {
+      let pb = 0;
+      positions.forEach(function(position) {
+        const interactionId = position.card.dataset.key;
+        const mark = contentEl.querySelector('mark.hl[data-key="' + interactionId + '"]');
+        const markTop = mark ? mark.offsetTop : 0;
+        const top = Math.max(markTop, pb);
+        position.card.style.top = top + "px";
+        pb = top + position.card.offsetHeight + 8;
+      });
+    });
+  }
+
+  function buildToggleMarkup(collapsed) {
+    return '<button class="card-toggle" type="button" aria-label="' + (collapsed ? "Expand" : "Collapse") + '">' +
+      (collapsed ? "\u25B8" : "\u25BE") +
+      "</button>";
+  }
+
+  function buildInlineActionMarkup(options) {
+    const commentDisabled = options.commentDisabled ? " disabled" : "";
+    const askDisabled = options.askDisabled ? " disabled" : "";
+    return '<div class="inline-actions">' +
+      '<button class="text-action primary ' + esc(options.commentClass) + '" type="button"' + commentDisabled + '>' + esc(options.commentLabel) + "</button>" +
+      '<span class="action-sep">\u00b7</span>' +
+      '<button class="text-action ' + esc(options.askClass) + '" type="button"' + askDisabled + '>' + esc(options.askLabel) + "</button>" +
+      '<span class="action-sep">\u00b7</span>' +
+      '<button class="text-action ' + esc(options.cancelClass) + '" type="button">' + esc(options.cancelLabel) + "</button>" +
+      "</div>";
+  }
+
+  function buildCommentCardHtml(comment) {
+    if (comment._collapsed) {
+      return '<div class="card-collapsed-line">' +
+        '<span class="badge">' + esc(comment.badge_label) + '</span>' +
+        '<span class="card-collapsed-text">' + esc(trunc(comment.comment, 60)) + '</span>' +
+        buildToggleMarkup(true) +
+        "</div>";
+    }
+
+    if (comment._editing) {
+      return '<div class="card-head">' +
+        '<div class="card-head-main">' +
+        '<span class="badge">' + esc(comment.badge_label) + '</span>' +
+        '<div class="card-quote">' + esc(trunc(comment.anchor.selected_text, 40)) + '</div>' +
+        "</div>" +
+        buildToggleMarkup(false) +
+        "</div>" +
+        '<textarea class="card-edit-area" rows="2">' + esc(comment.comment) + "</textarea>" +
+        '<div class="inline-actions">' +
+        '<button class="text-action primary card-save-btn" type="button">Save</button>' +
+        '<span class="action-sep">\u00b7</span>' +
+        '<button class="text-action card-cancel-btn" type="button">Cancel</button>' +
+        "</div>";
+    }
+
+    return '<div class="card-head">' +
+      '<div class="card-head-main">' +
+      '<span class="badge">' + esc(comment.badge_label) + '</span>' +
+      '<div class="card-quote">' + esc(trunc(comment.anchor.selected_text, 40)) + '</div>' +
+      "</div>" +
+      buildToggleMarkup(false) +
+      "</div>" +
+      '<div class="card-body">' + esc(comment.comment) + "</div>" +
+      '<div class="inline-actions">' +
+      '<button class="text-action card-copy" type="button">Copy</button>' +
+      '<span class="action-sep">\u00b7</span>' +
+      '<button class="text-action card-edit" type="button">Edit</button>' +
+      '<span class="action-sep">\u00b7</span>' +
+      '<button class="text-action action-delete card-delete" type="button">Delete</button>' +
+      "</div>";
+  }
+
+  function buildThreadGroupHtml(entry) {
+    if (entry.kind === "note") {
+      return '<div class="thread-group"><div class="thread-note">' + esc(entry.content) + "</div></div>";
+    }
+
+    return '<div class="thread-group">' +
+      '<div class="thread-question">' + esc(entry.question) + "</div>" +
+      (entry.answer
+        ? '<div class="thread-answer">' + esc(entry.answer) + "</div>"
+        : '<div class="card-loading">Waiting for answer\u2026</div>') +
+      "</div>";
+  }
+
+  function buildQuestionCardHtml(questionThread) {
+    const firstEntry = getFirstQuestionEntry(questionThread);
+    const messageCount = getThreadMessageCount(questionThread);
+    const canCollapse = !isQuestionThreadPending(questionThread);
+
+    if (questionThread._collapsed && canCollapse) {
+      return '<div class="card-collapsed-line">' +
+        '<span class="badge">' + esc(questionThread.badge_label) + '</span>' +
+        '<span class="card-collapsed-text">' + esc(trunc(firstEntry ? getThreadEntryText(firstEntry) : "", 60)) + '</span>' +
+        '<span class="card-collapsed-meta">' + esc(messageCount + " messages") + '</span>' +
+        buildToggleMarkup(true) +
+        "</div>";
+    }
+
+    let html = '<div class="card-head">' +
+      '<div class="card-head-main">' +
+      '<span class="badge">' + esc(questionThread.badge_label) + '</span>' +
+      '<div class="card-quote">' + esc(trunc(questionThread.anchor.selected_text, 40)) + '</div>' +
+      "</div>" +
+      (canCollapse ? buildToggleMarkup(false) : "") +
+      "</div>";
+
+    html += questionThread.thread.map(buildThreadGroupHtml).join("");
+
+    if (questionThread._composerOpen) {
+      html += '<div class="card-followup">' +
+        '<textarea class="card-edit-area card-followup-area" rows="2" placeholder="Write a note or question\u2026">' +
+        esc(questionThread._composerValue || "") +
+        "</textarea>" +
+        buildInlineActionMarkup({
+          commentClass: "card-followup-note",
+          commentLabel: "Comment \u21B5",
+          commentDisabled: false,
+          askClass: "card-followup-ask",
+          askLabel: "Ask \u2318\u21B5",
+          askDisabled: !canStartAsk(),
+          cancelClass: "card-followup-cancel",
+          cancelLabel: "Cancel",
+        }) +
+        "</div>";
+    } else if (!reviewClosed) {
+      html += '<div class="followup-trigger card-followup-trigger">+ follow up</div>';
+    }
+
+    return html;
   }
 
   function renderCards() {
@@ -1196,34 +1530,19 @@ body.no-toc-empty .toc-toggle { display: none; }
 
     getAllInteractions().forEach(function(item) {
       const card = document.createElement("div");
-      card.className = "margin-card" + (item.interaction_id === activeInteractionId ? " active" : "");
+      card.className = "margin-card " + (item.kind === "question" ? "thread-card" : "comment-card") +
+        (item.interaction_id === activeInteractionId ? " active" : "");
       card.dataset.key = item.interaction_id;
       card.dataset.kind = item.kind;
 
-      if (item.kind === "comment" && item.editing) {
-        card.innerHTML = '<div class="card-kind">Comment ' + esc(item.badge_label) + '</div>'
-          + '<div class="card-quote">' + esc(trunc(item.anchor.selected_text, 40)) + '</div>'
-          + '<textarea class="card-edit-area" rows="2">' + esc(item.comment) + '</textarea>'
-          + '<div class="card-edit-actions">'
-          + '<button class="btn card-save-btn" type="button">Save</button>'
-          + '<button class="btn card-cancel-btn" type="button">Cancel</button>'
-          + '</div>';
-      } else if (item.kind === "comment") {
-        card.innerHTML = '<div class="card-kind">Comment ' + esc(item.badge_label) + '</div>'
-          + '<div class="card-quote">' + esc(trunc(item.anchor.selected_text, 40)) + '</div>'
-          + '<div class="card-body">' + esc(item.comment) + '</div>'
-          + '<div class="card-actions">'
-          + '<button class="card-btn card-copy" title="Copy">copy</button>'
-          + '<button class="card-btn card-edit" title="Edit">edit</button>'
-          + '<button class="card-btn card-delete" title="Delete">del</button>'
-          + '</div>';
+      if (item.kind === "comment") {
+        const comment = getCommentById(item.interaction_id);
+        if (!comment) return;
+        card.innerHTML = buildCommentCardHtml(comment);
       } else {
-        card.innerHTML = '<div class="card-kind">Ask ' + esc(item.badge_label) + '</div>'
-          + '<div class="card-quote">' + esc(trunc(item.anchor.selected_text, 40)) + '</div>'
-          + '<div class="card-body">? ' + esc(item.question) + '</div>'
-          + (item.answer
-            ? '<div class="card-answer">' + esc(item.answer) + '</div>'
-            : '<div class="card-loading">Waiting for answer\\u2026</div>');
+        const questionThread = getQuestionThreadById(item.interaction_id);
+        if (!questionThread) return;
+        card.innerHTML = buildQuestionCardHtml(questionThread);
       }
 
       marginCol.appendChild(card);
@@ -1232,58 +1551,90 @@ body.no-toc-empty .toc-toggle { display: none; }
     positionCards();
   }
 
-  function updateUI() {
-    const commentCount = comments.length;
-    const questionCount = questions.length;
+  function buildAnnotationSummary(item) {
+    if (item.kind === "comment") {
+      return trunc(item.comment, 72);
+    }
 
-    commentCountEl.textContent = commentCount;
-    questionCountEl.textContent = questionCount;
-    let topText =
-      commentCount + " comment" + (commentCount !== 1 ? "s" : "") +
-      (questionCount ? " · " + questionCount + " ask" + (questionCount !== 1 ? "s" : "") : "");
+    const questionThread = getQuestionThreadById(item.interaction_id);
+    const firstEntry = getFirstQuestionEntry(questionThread);
+    return trunc((firstEntry ? getThreadEntryText(firstEntry) : "") + " \u2192 " + getThreadMessageCount(questionThread) + " messages", 96);
+  }
+
+  function updateUI() {
+    const annotations = getAllInteractions();
+    const annotationCount = annotations.length;
+
+    annotationCountEl.textContent = annotationCount;
+    let topText = annotationCount + " annotation" + (annotationCount !== 1 ? "s" : "");
     if (connectionStatus) {
       topText += " · " + connectionStatus;
     }
-    commentCountTop.textContent = topText;
+    annotationCountTop.textContent = topText;
 
-    commentsSection.hidden = commentCount === 0;
-    questionsSection.hidden = questionCount === 0;
+    annotationsSection.hidden = annotationCount === 0;
 
-    let commentsHtml = "";
-    comments.forEach(function(comment) {
-      commentsHtml += '<div class="comment-item" data-key="' + esc(comment.interaction_id) + '">';
-      commentsHtml += '<div class="comment-header">';
-      commentsHtml += '<span class="badge">' + esc(comment.badge_label) + '</span>';
-      if (comment.anchor.section) {
-        const sectionName = comment.anchor.section.replace(/^#+\\s*/, "");
-        commentsHtml += '<span class="comment-section">\\u00a7 ' + esc(trunc(sectionName, 30)) + '</span> \\u2014 ';
+    let annotationsHtml = "";
+    annotations.forEach(function(item) {
+      const sectionName = item.anchor.section ? item.anchor.section.replace(/^#+\\s*/, "") : "";
+      annotationsHtml += '<div class="annotation-item" data-key="' + esc(item.interaction_id) + '">';
+      annotationsHtml += '<div class="annotation-header">';
+      annotationsHtml += '<span class="badge">' + esc(item.badge_label) + '</span>';
+      if (sectionName) {
+        annotationsHtml += ' <span class="annotation-section">§ ' + esc(trunc(sectionName, 30)) + '</span> — ';
       }
-      commentsHtml += '<span class="comment-quote">\\u201c' + esc(trunc(comment.anchor.selected_text, 50)) + '\\u201d</span>';
-      commentsHtml += '</div>';
-      commentsHtml += '<div class="comment-body">\\u2192 ' + esc(comment.comment) + '</div>';
-      commentsHtml += '</div>';
-    });
-    commentsList.innerHTML = commentsHtml;
-
-    let questionsHtml = "";
-    questions.forEach(function(question) {
-      questionsHtml += '<div class="comment-item" data-key="' + esc(question.interaction_id) + '">';
-      questionsHtml += '<div class="comment-header">';
-      questionsHtml += '<span class="badge">' + esc(question.badge_label) + '</span>';
-      if (question.anchor.section) {
-        const sectionName = question.anchor.section.replace(/^#+\\s*/, "");
-        questionsHtml += '<span class="comment-section">\\u00a7 ' + esc(trunc(sectionName, 30)) + '</span> \\u2014 ';
+      annotationsHtml += '<span class="annotation-quote">“' + esc(trunc(item.anchor.selected_text, 50)) + '”</span>';
+      annotationsHtml += '</div>';
+      annotationsHtml += '<div class="annotation-body">→ ' + esc(buildAnnotationSummary(item)) + '</div>';
+      if (item.kind === "question" && item.answer) {
+        annotationsHtml += '<div class="annotation-answer">← ' + esc(trunc(item.answer, 120)) + '</div>';
       }
-      questionsHtml += '<span class="comment-quote">\\u201c' + esc(trunc(question.anchor.selected_text, 50)) + '\\u201d</span>';
-      questionsHtml += '</div>';
-      questionsHtml += '<div class="comment-body">? ' + esc(question.question) + '</div>';
-      questionsHtml += '<div class="comment-answer">' + esc(question.answer || "Waiting for answer\\u2026") + '</div>';
-      questionsHtml += '</div>';
+      annotationsHtml += "</div>";
     });
-    questionsList.innerHTML = questionsHtml;
+    annotationsList.innerHTML = annotationsHtml;
 
     renderCards();
-    setAskDisabled();
+    updatePopupActions();
+  }
+
+  function clearPendingHighlight() {
+    contentEl.querySelectorAll("mark.hl-pending").forEach(function(mark) {
+      const parent = mark.parentNode;
+      while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+      parent.removeChild(mark);
+      parent.normalize();
+    });
+  }
+
+  function applyPendingHighlight(range) {
+    try {
+      // Collect text nodes in range
+      var textNodes = [];
+      var walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT, null);
+      var node;
+      var inRange = false;
+      while ((node = walker.nextNode())) {
+        if (node === range.startContainer) inRange = true;
+        if (inRange) textNodes.push(node);
+        if (node === range.endContainer) break;
+      }
+      if (textNodes.length === 0) return;
+
+      // Wrap each text node's selected portion
+      for (var i = 0; i < textNodes.length; i++) {
+        var tn = textNodes[i];
+        var start = (tn === range.startContainer) ? range.startOffset : 0;
+        var end = (tn === range.endContainer) ? range.endOffset : tn.length;
+        if (start >= end) continue;
+        var mid = tn;
+        if (start > 0) mid = tn.splitText(start);
+        if (end - start < mid.length) mid.splitText(end - start);
+        var mark = document.createElement("mark");
+        mark.className = "hl-pending";
+        mid.parentNode.insertBefore(mark, mid);
+        mark.appendChild(mid);
+      }
+    } catch(e) {}
   }
 
   function showPopup(range) {
@@ -1291,27 +1642,11 @@ body.no-toc-empty .toc-toggle { display: none; }
     const rect = range.getBoundingClientRect();
     popup.style.left = Math.min(rect.right + 4, window.innerWidth - 240) + "px";
     popup.style.top = (rect.bottom + 4) + "px";
-    popupModeButtons.hidden = false;
-    popupForm.hidden = true;
-    popup.classList.add("visible");
-    setAskDisabled();
-  }
-
-  function expandPopup(mode) {
-    if (!currentRange) return;
-    if (mode === "ask" && !canStartAsk()) return;
-
-    const text = getPlainRangeText(currentRange).trim();
-    if (!text) return;
-
-    popupMode = mode;
-    popupQuote.textContent = trunc(text, 120);
-    popupModeButtons.hidden = true;
-    popupForm.hidden = false;
+    popupQuote.textContent = trunc(getPlainRangeText(currentRange).trim(), 120);
     popupText.value = "";
-    popupText.placeholder = mode === "ask" ? "Ask about this selection\\u2026" : "Your thought\\u2026";
-    popupSubmit.textContent = mode === "ask" ? "Ask" : "Add";
-
+    updatePopupActions();
+    applyPendingHighlight(currentRange);
+    popup.classList.add("visible");
     requestAnimationFrame(function() {
       const rect = popup.getBoundingClientRect();
       if (rect.bottom > window.innerHeight - 8) popup.style.top = Math.max(8, window.innerHeight - rect.height - 8) + "px";
@@ -1322,9 +1657,8 @@ body.no-toc-empty .toc-toggle { display: none; }
 
   function hidePopup(restoreSelection) {
     popup.classList.remove("visible");
-    popupModeButtons.hidden = false;
-    popupForm.hidden = true;
     popupText.value = "";
+    clearPendingHighlight();
     if (restoreSelection && currentRange) {
       try {
         const sel = window.getSelection();
@@ -1357,6 +1691,7 @@ body.no-toc-empty .toc-toggle { display: none; }
       anchor: anchor,
       comment: text,
       _editing: false,
+      _collapsed: false,
     };
 
     comments.push(comment);
@@ -1389,9 +1724,17 @@ body.no-toc-empty .toc-toggle { display: none; }
     });
   }
 
+  function autosizeCardTextarea(textarea) {
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = Math.min(textarea.scrollHeight + 4, 300) + "px";
+    positionCards();
+  }
+
   function editComment(interactionId) {
     const comment = getCommentById(interactionId);
     if (!comment) return;
+    comment._collapsed = false;
     comment._editing = true;
     renderCards();
 
@@ -1399,8 +1742,7 @@ body.no-toc-empty .toc-toggle { display: none; }
     if (!card) return;
     const textarea = card.querySelector(".card-edit-area");
     if (!textarea) return;
-    textarea.style.height = "auto";
-    textarea.style.height = Math.min(textarea.scrollHeight + 4, 300) + "px";
+    autosizeCardTextarea(textarea);
     textarea.focus();
     textarea.setSelectionRange(0, 0);
     textarea.scrollTop = 0;
@@ -1432,10 +1774,127 @@ body.no-toc-empty .toc-toggle { display: none; }
     contentEl.focus();
   }
 
+  function toggleCommentCollapse(interactionId) {
+    const comment = getCommentById(interactionId);
+    if (!comment || comment._editing) return;
+    comment._collapsed = !comment._collapsed;
+    renderCards();
+    setActiveInteraction(interactionId);
+  }
+
+  function toggleQuestionThread(interactionId) {
+    const questionThread = getQuestionThreadById(interactionId);
+    if (!questionThread || isQuestionThreadPending(questionThread)) {
+      scrollToInteraction(interactionId);
+      return;
+    }
+
+    questionThread._collapsed = !questionThread._collapsed;
+    renderCards();
+    setActiveInteraction(interactionId);
+  }
+
+  function focusFollowupComposer(interactionId) {
+    const card = marginCol.querySelector('.margin-card[data-key="' + interactionId + '"]');
+    if (!card) return;
+    const textarea = card.querySelector(".card-followup-area");
+    if (!textarea) return;
+    autosizeCardTextarea(textarea);
+    textarea.focus();
+    const end = textarea.value.length;
+    textarea.setSelectionRange(end, end);
+  }
+
+  function openFollowupComposer(interactionId) {
+    const questionThread = getQuestionThreadById(interactionId);
+    if (!questionThread || reviewClosed) return;
+    questionThread._collapsed = false;
+    questionThread._composerOpen = true;
+    renderCards();
+    setActiveInteraction(interactionId);
+    focusFollowupComposer(interactionId);
+  }
+
+  function cancelFollowupComposer(interactionId) {
+    const questionThread = getQuestionThreadById(interactionId);
+    if (!questionThread) return;
+    questionThread._composerOpen = false;
+    questionThread._composerValue = "";
+    renderCards();
+    placeCursorAtInteraction(interactionId);
+    contentEl.focus();
+  }
+
+  function submitFollowupAs(interactionId, mode) {
+    const questionThread = getQuestionThreadById(interactionId);
+    if (!questionThread || reviewClosed) return;
+    if (mode === "question" && !canStartAsk()) return;
+
+    const card = marginCol.querySelector('.margin-card[data-key="' + interactionId + '"]');
+    const textarea = card && card.querySelector(".card-followup-area");
+    const text = textarea ? textarea.value.trim() : "";
+    if (!text) return;
+
+    const parentInteractionId = questionThread.interaction_id;
+    const followupInteractionId = makeId(mode === "question" ? "question" : "note");
+    const threadEntry = {
+      interaction_id: followupInteractionId,
+      parent_interaction_id: parentInteractionId,
+      kind: mode === "question" ? "question" : "note",
+      question: mode === "question" ? text : "",
+      content: mode === "note" ? text : "",
+      answer: "",
+    };
+
+    questionThread.thread.push(threadEntry);
+    questionThread._collapsed = false;
+    questionThread._composerOpen = false;
+    questionThread._composerValue = "";
+    if (mode === "question") {
+      pendingInteractionId = followupInteractionId;
+    }
+    updateUI();
+    setActiveInteraction(interactionId);
+    contentEl.focus();
+
+    const payload = mode === "question"
+      ? {
+          type: "question",
+          interaction_id: threadEntry.interaction_id,
+          parent_interaction_id: threadEntry.parent_interaction_id,
+          badge_label: questionThread.badge_label,
+          anchor: questionThread.anchor,
+          question: threadEntry.question,
+        }
+      : {
+          type: "thread_note",
+          interaction_id: threadEntry.interaction_id,
+          parent_interaction_id: threadEntry.parent_interaction_id,
+          badge_label: questionThread.badge_label,
+          anchor: questionThread.anchor,
+          content: threadEntry.content,
+        };
+
+    postEvent(payload).catch(function(err) {
+      questionThread.thread = questionThread.thread.filter(function(entry) {
+        return entry.interaction_id !== followupInteractionId;
+      });
+      questionThread._composerOpen = true;
+      questionThread._composerValue = text;
+      if (mode === "question") {
+        pendingInteractionId = null;
+      }
+      updateUI();
+      focusFollowupComposer(interactionId);
+      alert("Error: " + err.message);
+    });
+  }
+
   function commitComment() {
     const text = popupText.value.trim();
     if (!text || !currentRange) return;
 
+    clearPendingHighlight();
     const savedScrollTop = scrollArea.scrollTop;
     const comment = addComment(currentRange, text);
     if (!comment) return;
@@ -1457,16 +1916,27 @@ body.no-toc-empty .toc-toggle { display: none; }
     const text = popupText.value.trim();
     if (!text || !currentRange || !canStartAsk()) return;
 
+    clearPendingHighlight();
     const anchor = buildAnchorFromRange(currentRange);
     if (!anchor) return;
 
     const interactionId = makeId("question");
+    const threadEntry = {
+      interaction_id: interactionId,
+      parent_interaction_id: null,
+      kind: "question",
+      question: text,
+      content: "",
+      answer: "",
+    };
     const question = {
       interaction_id: interactionId,
       badge_label: "Q" + (nextQuestionNumber++),
       anchor: anchor,
-      question: text,
-      answer: "",
+      thread: [threadEntry],
+      _collapsed: false,
+      _composerOpen: false,
+      _composerValue: "",
     };
 
     questions.push(question);
@@ -1483,7 +1953,7 @@ body.no-toc-empty .toc-toggle { display: none; }
       interaction_id: question.interaction_id,
       badge_label: question.badge_label,
       anchor: question.anchor,
-      question: question.question,
+      question: threadEntry.question,
     }).catch(function(err) {
       questions = questions.filter(function(entry) { return entry.interaction_id !== interactionId; });
       pendingInteractionId = null;
@@ -1491,14 +1961,6 @@ body.no-toc-empty .toc-toggle { display: none; }
       updateUI();
       alert("Error: " + err.message);
     });
-  }
-
-  function commitPopup() {
-    if (popupMode === "ask") {
-      commitQuestion();
-      return;
-    }
-    commitComment();
   }
 
   function getInteractionMarks() {
@@ -1572,8 +2034,8 @@ body.no-toc-empty .toc-toggle { display: none; }
   function submit() {
     if (sent || reviewClosed) return;
     if (pendingInteractionId) {
-      const pendingQuestion = getQuestionById(pendingInteractionId);
-      const pendingText = pendingQuestion?.question
+      const pendingQuestion = getQuestionEntryById(pendingInteractionId);
+      const pendingText = pendingQuestion && pendingQuestion.question
         ? '"' + trunc(pendingQuestion.question, 140) + '"'
         : "this pending question";
       const shouldSubmit = window.confirm(
@@ -1614,7 +2076,7 @@ body.no-toc-empty .toc-toggle { display: none; }
   }
 
   comments = Array.isArray(hydration.comments) ? hydration.comments.map(normalizeComment) : [];
-  questions = Array.isArray(hydration.questions) ? hydration.questions.map(normalizeQuestion) : [];
+  questions = normalizeQuestions(hydration.questions);
   nextCommentNumber = nextNumberFrom(comments, "") || 1;
   nextQuestionNumber = nextNumberFrom(questions, "Q") || 1;
   generalFeedback.value = String(hydration.general_feedback || "");
@@ -1648,13 +2110,28 @@ body.no-toc-empty .toc-toggle { display: none; }
     }, 10);
   });
 
-  popupCommentBtn.addEventListener("click", function(e) { e.stopPropagation(); expandPopup("comment"); });
-  popupAskBtn.addEventListener("click", function(e) { e.stopPropagation(); expandPopup("ask"); });
-  popupSubmit.addEventListener("click", function(e) { e.stopPropagation(); commitPopup(); });
+  popupCommentAction.addEventListener("click", function(e) { e.stopPropagation(); commitComment(); });
+  popupAskAction.addEventListener("click", function(e) {
+    e.stopPropagation();
+    if (canStartAsk()) {
+      commitQuestion();
+    }
+  });
   popupCancel.addEventListener("click", function(e) { e.stopPropagation(); hidePopup(true); contentEl.focus(); });
 
   popupText.addEventListener("keydown", function(e) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitPopup(); }
+    if (e.key === "Enter" && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (canStartAsk()) {
+        commitQuestion();
+      }
+    }
+    if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      commitComment();
+    }
     if (e.key === "Escape") { e.preventDefault(); hidePopup(true); contentEl.focus(); }
   });
 
@@ -1681,15 +2158,69 @@ body.no-toc-empty .toc-toggle { display: none; }
       return;
     }
 
+    if (e.target.closest(".card-toggle")) {
+      if (kind === "comment") toggleCommentCollapse(interactionId);
+      if (kind === "question") toggleQuestionThread(interactionId);
+      return;
+    }
+
+    if (kind === "question" && e.target.closest(".card-followup-note")) {
+      submitFollowupAs(interactionId, "note");
+      return;
+    }
+    if (kind === "question" && e.target.closest(".card-followup-ask")) {
+      if (canStartAsk()) {
+        submitFollowupAs(interactionId, "question");
+      }
+      return;
+    }
+    if (kind === "question" && e.target.closest(".card-followup-cancel")) {
+      cancelFollowupComposer(interactionId);
+      return;
+    }
+    if (kind === "question" && e.target.closest(".card-followup-trigger")) {
+      openFollowupComposer(interactionId);
+      return;
+    }
+
     if (kind === "comment" && e.target.closest(".card-delete")) { deleteComment(interactionId); contentEl.focus(); return; }
     if (kind === "comment" && e.target.closest(".card-edit")) { editComment(interactionId); return; }
     if (kind === "comment" && e.target.closest(".card-save-btn")) { saveCommentEdit(interactionId); return; }
     if (kind === "comment" && e.target.closest(".card-cancel-btn")) { cancelCommentEdit(interactionId); return; }
 
+    if (kind === "question" && getQuestionThreadById(interactionId)?._collapsed) {
+      toggleQuestionThread(interactionId);
+      return;
+    }
+    if (kind === "comment" && getCommentById(interactionId)?._collapsed) {
+      toggleCommentCollapse(interactionId);
+      return;
+    }
+
     scrollToInteraction(interactionId);
   });
 
   marginCol.addEventListener("keydown", function(e) {
+    const followupTextarea = e.target.closest(".card-followup-area");
+    if (followupTextarea) {
+      const card = followupTextarea.closest(".margin-card");
+      const interactionId = card.dataset.key;
+      if (e.key === "Enter" && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (canStartAsk()) {
+          submitFollowupAs(interactionId, "question");
+        }
+      }
+      if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        submitFollowupAs(interactionId, "note");
+      }
+      if (e.key === "Escape") { e.preventDefault(); cancelFollowupComposer(interactionId); }
+      return;
+    }
+
     const textarea = e.target.closest(".card-edit-area");
     if (!textarea) return;
     const card = textarea.closest(".margin-card");
@@ -1698,14 +2229,28 @@ body.no-toc-empty .toc-toggle { display: none; }
     if (e.key === "Escape") { e.preventDefault(); cancelCommentEdit(interactionId); }
   });
 
+  marginCol.addEventListener("input", function(e) {
+    const textarea = e.target.closest(".card-edit-area");
+    if (!textarea) return;
+    autosizeCardTextarea(textarea);
+
+    if (textarea.classList.contains("card-followup-area")) {
+      const card = textarea.closest(".margin-card");
+      const interactionId = card && card.dataset.key;
+      const questionThread = interactionId ? getQuestionThreadById(interactionId) : null;
+      if (questionThread) {
+        questionThread._composerValue = textarea.value;
+      }
+    }
+  });
+
   function handleSummaryClick(e) {
-    const item = e.target.closest(".comment-item");
+    const item = e.target.closest(".annotation-item");
     if (!item) return;
     scrollToInteraction(item.dataset.key);
   }
 
-  commentsList.addEventListener("click", handleSummaryClick);
-  questionsList.addEventListener("click", handleSummaryClick);
+  annotationsList.addEventListener("click", handleSummaryClick);
 
   generalFeedback.addEventListener("input", scheduleFeedbackSync);
 
@@ -1730,17 +2275,15 @@ body.no-toc-empty .toc-toggle { display: none; }
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed && contentEl.contains(sel.anchorNode)) {
         e.preventDefault();
-        if (!currentRange) showPopup(sel.getRangeAt(0));
-        expandPopup("comment");
+        showPopup(sel.getRangeAt(0));
       }
     }
 
-    if (e.key === "a" && !e.metaKey && !e.ctrlKey && !e.altKey && !inTextarea && !inCardEdit && canStartAsk()) {
+    if (e.key === "a" && !e.metaKey && !e.ctrlKey && !e.altKey && !inTextarea && !inCardEdit) {
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed && contentEl.contains(sel.anchorNode)) {
         e.preventDefault();
-        if (!currentRange) showPopup(sel.getRangeAt(0));
-        expandPopup("ask");
+        showPopup(sel.getRangeAt(0));
       }
     }
 

@@ -292,6 +292,7 @@ export class ReviewSession {
       status: "question",
       session_id: this.id,
       interaction_id: question.interaction_id,
+      parent_interaction_id: question.parent_interaction_id || null,
       anchor: question.anchor,
       selected_text: question.anchor.selected_text,
       section: question.anchor.section,
@@ -312,12 +313,28 @@ export class ReviewSession {
         selected_text: comment.anchor.selected_text,
         comment: comment.comment,
       })),
-      questions: this.state.questions.map((question) => ({
-        interaction_id: question.interaction_id,
-        anchor: question.anchor,
-        question: question.question,
-        answer: question.answer || "",
-      })),
+      questions: this.state.questions.map((question) => {
+        if (question.kind === "note") {
+          return {
+            kind: "note",
+            interaction_id: question.interaction_id,
+            parent_interaction_id: question.parent_interaction_id || null,
+            badge_label: question.badge_label || "",
+            anchor: question.anchor,
+            content: question.content,
+          };
+        }
+
+        return {
+          kind: "question",
+          interaction_id: question.interaction_id,
+          parent_interaction_id: question.parent_interaction_id || null,
+          badge_label: question.badge_label || "",
+          anchor: question.anchor,
+          question: question.question,
+          answer: question.answer || "",
+        };
+      }),
       edits: this.state.edits.map((edit) => ({ ...edit })),
       final_document: this.state.markdown,
     };
@@ -360,7 +377,11 @@ export class ReviewSession {
     }
 
     const question = {
+      kind: "question",
       interaction_id: String(payload.interaction_id),
+      parent_interaction_id: payload.parent_interaction_id
+        ? String(payload.parent_interaction_id)
+        : null,
       badge_label: String(payload.badge_label || ""),
       anchor: this.normalizeAnchor(payload.anchor),
       question: String(payload.question || "").trim(),
@@ -374,6 +395,34 @@ export class ReviewSession {
     this.state.questions.push(question);
     this.state.pending_interaction_id = question.interaction_id;
     this.pushEvent(this.buildQuestionResult(question));
+  }
+
+  appendThreadNote(payload) {
+    const parentInteractionId = String(payload.parent_interaction_id || "").trim();
+    if (!parentInteractionId) {
+      throw buildJsonError("parent_interaction_id is required for thread notes", 400);
+    }
+
+    const parentEntry = this.state.questions.find(
+      (entry) => entry.interaction_id === parentInteractionId
+    );
+    if (!parentEntry) {
+      throw buildJsonError("Parent review interaction not found", 404);
+    }
+
+    const content = String(payload.content || "").trim();
+    if (!content) {
+      throw buildJsonError("Thread note content is required", 400);
+    }
+
+    this.state.questions.push({
+      kind: "note",
+      interaction_id: String(payload.interaction_id || randomUUID()),
+      parent_interaction_id: parentInteractionId,
+      badge_label: String(payload.badge_label || parentEntry.badge_label || ""),
+      anchor: this.normalizeAnchor(payload.anchor || parentEntry.anchor),
+      content,
+    });
   }
 
   sendResponse({ interaction_id, type, content }) {
@@ -487,6 +536,9 @@ export class ReviewSession {
         return { ok: true };
       case "question":
         this.enqueueQuestion(payload);
+        return { ok: true };
+      case "thread_note":
+        this.appendThreadNote(payload);
         return { ok: true };
       case "submit":
         this.state.general_feedback = String(payload.general_feedback || "");
