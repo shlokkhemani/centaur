@@ -1,7 +1,8 @@
-import fs from "node:fs/promises";
 import { buildReviewHtml } from "./html/review.js";
-import { serveHtmlAndWait } from "./transport/server.js";
+import { renderMarkdownToHtml, normalizeRenderedMarkdownHtml } from "./markdown.js";
 import { log } from "./logger.js";
+import { resolveMarkdownContent } from "./documents.js";
+import { createReviewSession, getReviewSession } from "./sessions.js";
 
 /**
  * Opens a document in the browser for inline review.
@@ -9,19 +10,54 @@ import { log } from "./logger.js";
  * and submit structured feedback.
  *
  * @param {{ title: string, description?: string, content?: string, filePath?: string }} config
- * @returns {Promise<{ comments?: object[], general_feedback?: string }>}
+ * @returns {Promise<object>}
  */
 export async function openReview({ title, description, content, filePath }) {
   log(`openReview: "${title}"`);
 
-  let markdown = content;
-  if (!markdown && filePath) {
-    markdown = await fs.readFile(filePath, "utf-8");
-  }
-  if (!markdown) {
-    throw new Error("Either content or filePath must be provided");
+  const markdown = await resolveMarkdownContent({ content, filePath });
+  let contentHtml = null;
+
+  try {
+    contentHtml = normalizeRenderedMarkdownHtml(await renderMarkdownToHtml(markdown));
+  } catch {}
+
+  const session = await createReviewSession({
+    initialState: {
+      markdown,
+      comments: [],
+      questions: [],
+      edits: [],
+      general_feedback: "",
+      pending_interaction_id: null,
+    },
+    renderPage: (hydration) =>
+      buildReviewHtml({
+        title,
+        description,
+        content: markdown,
+        contentHtml,
+        hydration,
+      }),
+  });
+
+  return session.waitForEvent();
+}
+
+export async function respondToReview({ sessionId, interactionId, type, content }) {
+  const session = getReviewSession(sessionId);
+  if (!session || session.isClosed()) {
+    return {
+      status: "session_closed",
+      session_id: sessionId,
+    };
   }
 
-  const html = buildReviewHtml({ title, description, content: markdown });
-  return serveHtmlAndWait(html);
+  session.sendResponse({
+    interaction_id: interactionId,
+    type,
+    content,
+  });
+
+  return session.waitForEvent();
 }

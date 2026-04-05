@@ -6,9 +6,9 @@
  * Optimised for puppeteer page.pdf().
  */
 
-import { escapeHtml } from "../utils.js";
+import { escapeHtml, serializeForInlineScript } from "../utils.js";
 
-export function buildPdfHtml({ title, content, subtitle }) {
+export function buildPdfHtml({ title, content, contentHtml, subtitle }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -160,15 +160,14 @@ strong { color: #000; }
 
 <div id="content"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
 <script>
 (function(){
-  const raw = ${JSON.stringify(content)};
+  const raw = ${serializeForInlineScript(content)};
+  const renderedHtml = ${serializeForInlineScript(contentHtml ?? null)};
   const el = document.getElementById("content");
   try {
-    if (window.marked) {
-      el.innerHTML = marked.parse(raw);
-    } else { throw 0; }
+    if (!renderedHtml) throw 0;
+    el.innerHTML = renderedHtml;
   } catch(e) {
     const pre = document.createElement("pre");
     pre.style.whiteSpace = "pre-wrap";

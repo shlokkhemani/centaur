@@ -6,9 +6,9 @@
  * with their highlights. Full keyboard navigation via contenteditable.
  */
 
-import { escapeHtml } from "../utils.js";
+import { escapeHtml, serializeForInlineScript } from "../utils.js";
 
-export function buildReviewHtml({ title, description, content }) {
+export function buildReviewHtml({ title, description, content, contentHtml, hydration }) {
   return `<!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
@@ -253,6 +253,25 @@ mark.hl.hl-active { background: rgba(136,136,136,0.35); }
   font-size: 10px;
 }
 .card-body { color: var(--fg); word-break: break-word; }
+.card-kind {
+  color: var(--fg-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.card-answer {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  color: var(--fg);
+  white-space: pre-wrap;
+}
+.card-loading {
+  margin-top: 6px;
+  color: var(--fg-dim);
+  font-style: italic;
+}
 .card-actions {
   display: flex;
   justify-content: flex-end;
@@ -334,6 +353,7 @@ mark.hl.hl-active { background: rgba(136,136,136,0.35); }
 .comment-section { color: var(--fg-dim); }
 .comment-quote { color: var(--fg-faint); font-style: italic; }
 .comment-body { padding-left: 20px; color: var(--fg); margin-top: 2px; }
+.comment-answer { padding-left: 20px; color: var(--fg-dim); margin-top: 4px; white-space: pre-wrap; }
 
 /* --- Feedback --- */
 .feedback-section { padding-bottom: 20px; }
@@ -362,6 +382,11 @@ mark.hl.hl-active { background: rgba(136,136,136,0.35); }
   border-radius: 4px;
 }
 .popup.visible { display: block; }
+.popup-mode-buttons {
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+}
 .popup-trigger {
   display: block;
   padding: 4px 10px;
@@ -374,6 +399,10 @@ mark.hl.hl-active { background: rgba(136,136,136,0.35); }
   cursor: pointer;
 }
 .popup-trigger:hover { background: var(--btn-hover); }
+.popup-trigger:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 .popup-form { padding: 10px; width: 320px; }
 .popup-quote {
   font-size: 11px;
@@ -495,6 +524,10 @@ body.no-toc-empty .toc-toggle { display: none; }
       <div class="section-divider"><span>Comments (<span id="comment-count">0</span>)</span></div>
       <div id="comments-list"></div>
     </div>
+    <div id="questions-section" hidden>
+      <div class="section-divider"><span>Questions (<span id="question-count">0</span>)</span></div>
+      <div id="questions-list"></div>
+    </div>
     <div class="feedback-section">
       <div class="section-divider"><span>Anything else?</span></div>
       <textarea class="txt" id="general-feedback" rows="3" placeholder="General feedback\u2026"></textarea>
@@ -504,18 +537,21 @@ body.no-toc-empty .toc-toggle { display: none; }
 </div>
 
 <div class="botbar">
-  <span class="kbd">\u2318\u21B5 submit \u00b7 c comment \u00b7 n/p next/prev \u00b7 e edit \u00b7 d delete \u00b7 [ sidebar</span>
+  <span class="kbd">\u2318\u21B5 submit \u00b7 c comment \u00b7 a ask \u00b7 n/p next/prev \u00b7 e edit \u00b7 d delete \u00b7 [ sidebar</span>
   <button class="btn" id="sub" type="button">Submit</button>
 </div>
 
 <div id="popup" class="popup">
-  <button id="popup-btn" class="popup-trigger" type="button">Comment</button>
+  <div class="popup-mode-buttons" id="popup-mode-buttons">
+    <button id="popup-comment-btn" class="popup-trigger" type="button">Comment</button>
+    <button id="popup-ask-btn" class="popup-trigger" type="button">Ask</button>
+  </div>
   <div id="popup-form" class="popup-form" hidden>
     <div class="popup-quote" id="popup-quote"></div>
     <textarea class="popup-text" id="popup-text" rows="2" placeholder="Your thought\u2026"></textarea>
     <div class="popup-actions">
       <button class="btn" id="popup-cancel" type="button">Cancel</button>
-      <button class="btn" id="popup-add" type="button">Add</button>
+      <button class="btn" id="popup-submit" type="button">Add</button>
     </div>
   </div>
 </div>
@@ -524,51 +560,63 @@ body.no-toc-empty .toc-toggle { display: none; }
   <b>Submitted.</b>&nbsp;You can close this tab.
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js" integrity="sha384-H+hy9ULve6xfxRkWIh/YOtvDdpXgV2fmAGQkIDTxIgZwNoaoBal14Di2YTMR6MzR" crossorigin="anonymous" onerror="window._mf=true"></script>
 <script>
 (function(){
-  const raw = ${JSON.stringify(content)};
+  const raw = ${serializeForInlineScript(content)};
+  const renderedHtml = ${serializeForInlineScript(contentHtml ?? null)};
+  const hydration = ${serializeForInlineScript(
+    hydration ?? {
+      session_id: null,
+      comments: [],
+      questions: [],
+      edits: [],
+      general_feedback: "",
+      pending_interaction_id: null,
+    }
+  )};
 
-  // --- DOM refs ---
   const contentEl = document.getElementById("md-content");
   const tocEl = document.getElementById("toc");
   const scrollArea = document.getElementById("scroll-area");
-  const contentCol = document.getElementById("content-col");
   const marginCol = document.getElementById("margin-col");
   const popup = document.getElementById("popup");
-  const popupBtn = document.getElementById("popup-btn");
+  const popupModeButtons = document.getElementById("popup-mode-buttons");
+  const popupCommentBtn = document.getElementById("popup-comment-btn");
+  const popupAskBtn = document.getElementById("popup-ask-btn");
   const popupForm = document.getElementById("popup-form");
   const popupQuote = document.getElementById("popup-quote");
   const popupText = document.getElementById("popup-text");
-  const popupAdd = document.getElementById("popup-add");
+  const popupSubmit = document.getElementById("popup-submit");
   const popupCancel = document.getElementById("popup-cancel");
   const commentsList = document.getElementById("comments-list");
   const commentsSection = document.getElementById("comments-section");
   const commentCountEl = document.getElementById("comment-count");
   const commentCountTop = document.getElementById("comment-count-top");
+  const questionsList = document.getElementById("questions-list");
+  const questionsSection = document.getElementById("questions-section");
+  const questionCountEl = document.getElementById("question-count");
   const generalFeedback = document.getElementById("general-feedback");
   const overlay = document.getElementById("overlay");
   const toggle = document.getElementById("toggle");
   const sub = document.getElementById("sub");
   const subTop = document.getElementById("sub-top");
+  const MAX_SSE_FAILURES = 5;
 
-  // --- State ---
   let comments = [];
-  let nextId = 1;
+  let questions = [];
   let sent = false;
   let currentRange = null;
-  let activeCommentId = null;
-
-  // --- Utils ---
-  function simpleHash(s) {
-    let h = 5381;
-    for (let i = 0; i < s.length; i++) {
-      h = ((h << 5) + h) + s.charCodeAt(i);
-      h = h & h;
-    }
-    return (h >>> 0).toString(16).padStart(8, "0").slice(0, 8);
-  }
-  const storageKey = "review_" + simpleHash(raw);
+  let activeInteractionId = null;
+  let popupMode = "comment";
+  let pendingInteractionId = hydration.pending_interaction_id || null;
+  let feedbackSyncTimer = null;
+  let eventSource = null;
+  let reviewClosed = false;
+  let sseStopped = false;
+  let sseFailureCount = 0;
+  let connectionStatus = "";
+  let nextCommentNumber = 1;
+  let nextQuestionNumber = 1;
 
   function trunc(s, n) {
     return s.length > n ? s.slice(0, n) + "\\u2026" : s;
@@ -580,7 +628,240 @@ body.no-toc-empty .toc-toggle { display: none; }
     return d.innerHTML;
   }
 
-  // --- Theme ---
+  function makeId(prefix) {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return prefix + "-" + window.crypto.randomUUID();
+    }
+    return prefix + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+  }
+
+  function nextNumberFrom(items, prefix) {
+    let max = 0;
+    items.forEach(function(item) {
+      const label = String(item.badge_label || "");
+      const match = prefix
+        ? label.match(new RegExp("^" + prefix + "(\\\\d+)$"))
+        : label.match(/^(\\d+)$/);
+      if (match) {
+        max = Math.max(max, parseInt(match[1], 10));
+      }
+    });
+    return max + 1;
+  }
+
+  function normalizeAnchor(anchor) {
+    const start = Math.max(0, Number(anchor && anchor.offset_start) || 0);
+    const end = Math.max(start, Number(anchor && anchor.offset_end) || start);
+    return {
+      offset_start: start,
+      offset_end: end,
+      surrounding_context: String(anchor && anchor.surrounding_context || ""),
+      selected_text: String(anchor && anchor.selected_text || ""),
+      section: String(anchor && anchor.section || ""),
+    };
+  }
+
+  function normalizeComment(comment) {
+    return {
+      interaction_id: String(comment && comment.interaction_id || makeId("comment")),
+      badge_label: String(comment && comment.badge_label || nextCommentNumber++),
+      anchor: normalizeAnchor(comment && comment.anchor),
+      comment: String(comment && comment.comment || ""),
+      _editing: false,
+    };
+  }
+
+  function normalizeQuestion(question) {
+    return {
+      interaction_id: String(question && question.interaction_id || makeId("question")),
+      badge_label: String(question && question.badge_label || ("Q" + nextQuestionNumber++)),
+      anchor: normalizeAnchor(question && question.anchor),
+      question: String(question && question.question || ""),
+      answer: String(question && question.answer || ""),
+    };
+  }
+
+  function getDocumentText() {
+    const clone = contentEl.cloneNode(true);
+    clone.querySelectorAll(".badge").forEach(function(el) { el.remove(); });
+    return clone.textContent || "";
+  }
+
+  function getPlainRangeText(range) {
+    const fragment = range.cloneContents();
+    if (fragment.querySelectorAll) {
+      fragment.querySelectorAll(".badge").forEach(function(el) { el.remove(); });
+    }
+    return fragment.textContent || "";
+  }
+
+  function getCommentById(interactionId) {
+    return comments.find(function(comment) { return comment.interaction_id === interactionId; }) || null;
+  }
+
+  function getQuestionById(interactionId) {
+    return questions.find(function(question) { return question.interaction_id === interactionId; }) || null;
+  }
+
+  function getActiveEditableComment() {
+    if (!activeInteractionId) return null;
+    return getCommentById(activeInteractionId);
+  }
+
+  function getAllInteractions() {
+    const items = [];
+    comments.forEach(function(comment) {
+      items.push({
+        kind: "comment",
+        interaction_id: comment.interaction_id,
+        badge_label: comment.badge_label,
+        anchor: comment.anchor,
+        comment: comment.comment,
+        editing: comment._editing === true,
+      });
+    });
+    questions.forEach(function(question) {
+      items.push({
+        kind: "question",
+        interaction_id: question.interaction_id,
+        badge_label: question.badge_label,
+        anchor: question.anchor,
+        question: question.question,
+        answer: question.answer,
+        pending: pendingInteractionId === question.interaction_id && !question.answer,
+      });
+    });
+    items.sort(function(a, b) {
+      return a.anchor.offset_start - b.anchor.offset_start;
+    });
+    return items;
+  }
+
+  function setAskDisabled() {
+    let disabledLabel = "";
+    if (reviewClosed) disabledLabel = "closed";
+    else if (pendingInteractionId) disabledLabel = "waiting";
+    else if (sseStopped) disabledLabel = "offline";
+
+    popupAskBtn.disabled = !!disabledLabel;
+    popupAskBtn.textContent = disabledLabel ? "Ask (" + disabledLabel + ")" : "Ask";
+  }
+
+  function canStartAsk() {
+    return !reviewClosed && !pendingInteractionId && !sseStopped;
+  }
+
+  async function postEvent(payload) {
+    const res = await fetch("/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      let message = String(res.status);
+      try {
+        const data = await res.json();
+        if (data && data.error) {
+          message = data.error;
+        }
+      } catch {}
+      throw new Error(message);
+    }
+
+    try {
+      return await res.json();
+    } catch {
+      return { ok: true };
+    }
+  }
+
+  function scheduleFeedbackSync() {
+    if (feedbackSyncTimer) {
+      clearTimeout(feedbackSyncTimer);
+    }
+    feedbackSyncTimer = setTimeout(function() {
+      postEvent({
+        type: "draft_feedback",
+        general_feedback: generalFeedback.value,
+      }).catch(function() {});
+    }, 250);
+  }
+
+  function stopEventSource() {
+    if (!eventSource) return;
+    eventSource.onopen = null;
+    eventSource.onmessage = null;
+    eventSource.onerror = null;
+    eventSource.close();
+    eventSource = null;
+  }
+
+  function showOverlayMessage(title, message) {
+    overlay.innerHTML = "<b>" + esc(title) + "</b>&nbsp;" + esc(message);
+    overlay.style.display = "flex";
+  }
+
+  function connectEventSource() {
+    if (eventSource || sseStopped || reviewClosed) return;
+
+    eventSource = new EventSource("/sse");
+    eventSource.onopen = function() {
+      sseFailureCount = 0;
+      if (connectionStatus) {
+        connectionStatus = "";
+        updateUI();
+      }
+    };
+    eventSource.onmessage = function(event) {
+      try {
+        handleServerEvent(JSON.parse(event.data));
+      } catch {}
+    };
+    eventSource.onerror = function() {
+      if (reviewClosed || sent) {
+        sseStopped = true;
+        stopEventSource();
+        return;
+      }
+
+      sseFailureCount += 1;
+      if (sseFailureCount >= MAX_SSE_FAILURES) {
+        sseStopped = true;
+        connectionStatus = "connection lost";
+        stopEventSource();
+        updateUI();
+      }
+    };
+  }
+
+  function handleServerEvent(event) {
+    if (event.type === "answer") {
+      const question = getQuestionById(event.interaction_id);
+      if (!question) return;
+      question.answer = String(event.content || "");
+      if (pendingInteractionId === question.interaction_id) {
+        pendingInteractionId = null;
+      }
+      updateUI();
+      return;
+    }
+
+    if (event.type === "session_closed") {
+      reviewClosed = true;
+      sseStopped = true;
+      pendingInteractionId = null;
+      connectionStatus = "";
+      stopEventSource();
+      sub.disabled = true;
+      subTop.disabled = true;
+      updateUI();
+      if (!sent) {
+        showOverlayMessage("Review session closed.", "You can close this tab.");
+      }
+    }
+  }
+
   function setTheme(t) {
     document.documentElement.setAttribute("data-theme", t);
     toggle.textContent = t === "dark" ? "light" : "dark";
@@ -592,9 +873,8 @@ body.no-toc-empty .toc-toggle { display: none; }
   });
   try { const saved = localStorage.getItem("wft"); if (saved) setTheme(saved); } catch(e) {}
 
-  // --- TOC toggle ---
   const tocToggle = document.getElementById("toc-toggle");
-  let tocHidden = false;
+  let tocHidden = true;
   function setTocVisible(show) {
     tocHidden = !show;
     document.body.classList.toggle("no-toc", tocHidden);
@@ -602,24 +882,16 @@ body.no-toc-empty .toc-toggle { display: none; }
     setTimeout(positionCards, 160);
   }
   tocToggle.addEventListener("click", function() { setTocVisible(tocHidden); });
-  try { if (localStorage.getItem("wft-toc") === "0") setTocVisible(false); } catch(e) {}
+  try { if (localStorage.getItem("wft-toc") === "1") setTocVisible(true); else setTocVisible(false); } catch(e) { setTocVisible(false); }
 
-  // --- Suppress contenteditable mutations ---
   contentEl.addEventListener("beforeinput", function(e) { e.preventDefault(); });
   contentEl.addEventListener("paste", function(e) { e.preventDefault(); });
   contentEl.addEventListener("cut", function(e) { e.preventDefault(); });
   contentEl.addEventListener("drop", function(e) { e.preventDefault(); });
 
-  // --- Render Markdown ---
   try {
-    if (window.marked && !window._mf) {
-      var html = marked.parse(raw);
-      // Strip newlines between tags (contenteditable renders them as blank lines)
-      html = html.replace(/>\\n+</g, "><");
-      // Strip trailing newline inside code blocks
-      html = html.replace(/\\n<\\/code>/g, "</code>");
-      contentEl.innerHTML = html;
-    } else { throw 0; }
+    if (!renderedHtml) throw 0;
+    contentEl.innerHTML = renderedHtml;
   } catch(e) {
     const pre = document.createElement("pre");
     pre.style.whiteSpace = "pre-wrap";
@@ -628,7 +900,6 @@ body.no-toc-empty .toc-toggle { display: none; }
     contentEl.appendChild(pre);
   }
 
-  // Ensure all headings have IDs
   const usedIds = {};
   contentEl.querySelectorAll("h1,h2,h3,h4,h5,h6").forEach(function(h) {
     if (!h.id) {
@@ -641,13 +912,12 @@ body.no-toc-empty .toc-toggle { display: none; }
     usedIds[h.id] = true;
   });
 
-  // --- TOC ---
   (function buildToc() {
     const headers = contentEl.querySelectorAll("h1,h2,h3,h4,h5,h6");
     if (!headers.length) { document.body.classList.add("no-toc-empty"); tocToggle.hidden = true; return; }
     let html = "";
     headers.forEach(function(h) {
-      const level = parseInt(h.tagName[1]);
+      const level = parseInt(h.tagName[1], 10);
       const indent = (level - 1) * 12;
       html += '<a class="toc-link" href="#' + h.id + '" style="padding-left:' + (14 + indent) + 'px" title="' + esc(h.textContent.trim()) + '">' + esc(h.textContent.trim()) + '</a>';
     });
@@ -674,22 +944,24 @@ body.no-toc-empty .toc-toggle { display: none; }
     });
   })();
 
-  // --- Character offset helpers ---
   function getCharOffset(container, offset) {
     const r = document.createRange();
     r.selectNodeContents(contentEl);
     r.setEnd(container, offset);
-    return r.toString().length;
+    const fragment = r.cloneContents();
+    if (fragment.querySelectorAll) {
+      fragment.querySelectorAll(".badge").forEach(function(el) { el.remove(); });
+    }
+    return (fragment.textContent || "").length;
   }
 
-  // --- Section detection ---
   function findSection(node) {
     let el = node.nodeType === 3 ? node.parentNode : node;
     while (el && el !== contentEl) {
       let prev = el.previousElementSibling;
       while (prev) {
         if (/^H[1-6]$/.test(prev.tagName)) {
-          const level = parseInt(prev.tagName[1]);
+          const level = parseInt(prev.tagName[1], 10);
           return "#".repeat(level) + " " + prev.textContent.trim();
         }
         prev = prev.previousElementSibling;
@@ -699,32 +971,44 @@ body.no-toc-empty .toc-toggle { display: none; }
     return "";
   }
 
-  // --- Highlighting ---
-  function wrapMark(textNode, cid, isFirst) {
+  function buildAnchorFromRange(range) {
+    const rawSelectedText = getPlainRangeText(range);
+    const selectedText = rawSelectedText.trim();
+    const startOff = getCharOffset(range.startContainer, range.startOffset);
+    const endOff = startOff + rawSelectedText.length;
+    if (!selectedText || endOff <= startOff) {
+      return null;
+    }
+    const fullText = getDocumentText();
+    return {
+      offset_start: startOff,
+      offset_end: endOff,
+      surrounding_context: fullText.slice(Math.max(0, startOff - 50), Math.min(fullText.length, endOff + 50)),
+      selected_text: selectedText,
+      section: findSection(range.startContainer),
+    };
+  }
+
+  function wrapMark(textNode, interactionId, badgeLabel, isFirst) {
     const mark = document.createElement("mark");
     mark.className = "hl";
-    mark.dataset.cid = cid;
+    mark.dataset.key = interactionId;
     textNode.parentNode.insertBefore(mark, textNode);
     mark.appendChild(textNode);
     if (isFirst) {
       const badge = document.createElement("span");
       badge.className = "badge";
-      badge.textContent = cid;
+      badge.textContent = badgeLabel;
       mark.insertBefore(badge, mark.firstChild);
     }
   }
 
-  function highlightRange(range, cid) {
+  function highlightRange(range, interactionId, badgeLabel) {
     let startC = range.startContainer;
     let endC = range.endContainer;
     let startO = range.startOffset;
     let endO = range.endOffset;
 
-    // Normalize element-node endpoints to text-node boundaries.
-    // When a user selects a whole element (e.g. a heading), the browser
-    // may set the container to the element with child-index offsets.
-    // The TreeWalker only visits text nodes, so it would never match
-    // these element containers, leaving inRange stuck true forever.
     if (startC.nodeType !== 3) {
       const children = startC.childNodes;
       if (startO < children.length) {
@@ -758,7 +1042,7 @@ body.no-toc-empty .toc-toggle { display: none; }
       if (startO === endO) return;
       const mid = startC.splitText(startO);
       mid.splitText(endO - startO);
-      wrapMark(mid, cid, true);
+      wrapMark(mid, interactionId, badgeLabel, true);
       return;
     }
 
@@ -770,17 +1054,17 @@ body.no-toc-empty .toc-toggle { display: none; }
     let inRange = false;
 
     while (walker.nextNode()) {
-      const n = walker.currentNode;
-      if (n.parentNode.classList && n.parentNode.classList.contains("badge")) continue;
-      if (n === startC) {
+      const node = walker.currentNode;
+      if (node.parentNode.classList && node.parentNode.classList.contains("badge")) continue;
+      if (node === startC) {
         inRange = true;
-        const info = { node: n, start: startO, end: n.textContent.length };
-        if (n === endC) { info.end = endO; nodes.push(info); break; }
+        const info = { node: node, start: startO, end: node.textContent.length };
+        if (node === endC) { info.end = endO; nodes.push(info); break; }
         nodes.push(info);
         continue;
       }
-      if (n === endC) { nodes.push({ node: n, start: 0, end: endO }); break; }
-      if (inRange) { nodes.push({ node: n, start: 0, end: n.textContent.length }); }
+      if (node === endC) { nodes.push({ node: node, start: 0, end: endO }); break; }
+      if (inRange) { nodes.push({ node: node, start: 0, end: node.textContent.length }); }
     }
 
     for (let i = nodes.length - 1; i >= 0; i--) {
@@ -794,27 +1078,29 @@ body.no-toc-empty .toc-toggle { display: none; }
       let target;
       if (s > 0) { target = node.splitText(s); } else { target = node; }
       if (e < nodeLen) { target.splitText(e - s); }
-
-      wrapMark(target, cid, i === 0);
+      wrapMark(target, interactionId, badgeLabel, i === 0);
     }
   }
 
-  function removeHighlight(cid) {
-    const marks = contentEl.querySelectorAll('mark.hl[data-cid="' + cid + '"]');
-    marks.forEach(function(m) {
-      const badge = m.querySelector(".badge");
+  function removeHighlight(interactionId) {
+    const marks = contentEl.querySelectorAll('mark.hl[data-key="' + interactionId + '"]');
+    marks.forEach(function(mark) {
+      const badge = mark.querySelector(".badge");
       if (badge) badge.remove();
-      const parent = m.parentNode;
-      while (m.firstChild) parent.insertBefore(m.firstChild, m);
-      parent.removeChild(m);
+      const parent = mark.parentNode;
+      while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+      parent.removeChild(mark);
       parent.normalize();
     });
   }
 
-  function applyHighlightFromOffsets(startOff, endOff, cid) {
+  function applyHighlightFromOffsets(startOff, endOff, interactionId, badgeLabel) {
     const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
     let pos = 0;
-    let startNode, endNode, startNodeOff, endNodeOff;
+    let startNode;
+    let endNode;
+    let startNodeOff;
+    let endNodeOff;
 
     while (walker.nextNode()) {
       const node = walker.currentNode;
@@ -830,38 +1116,59 @@ body.no-toc-empty .toc-toggle { display: none; }
         const r = document.createRange();
         r.setStart(startNode, Math.min(startNodeOff, startNode.textContent.length));
         r.setEnd(endNode, Math.min(endNodeOff, endNode.textContent.length));
-        highlightRange(r, cid);
+        highlightRange(r, interactionId, badgeLabel);
       } catch(e) {}
     }
   }
 
-  // --- Margin Cards ---
-  function renderCards() {
-    marginCol.innerHTML = "";
-    comments.forEach(function(c) {
-      const card = document.createElement("div");
-      card.className = "margin-card" + (c.id === activeCommentId ? " active" : "");
-      card.dataset.cid = c.id;
-
-      if (c._editing) {
-        card.innerHTML = '<div class="card-quote">' + esc(trunc(c.selected_text, 40)) + '</div>'
-          + '<textarea class="card-edit-area" rows="2">' + esc(c.comment) + '</textarea>'
-          + '<div class="card-edit-actions">'
-          + '<button class="btn card-save-btn" type="button">Save</button>'
-          + '<button class="btn card-cancel-btn" type="button">Cancel</button>'
-          + '</div>';
-      } else {
-        card.innerHTML = '<div class="card-quote">' + esc(trunc(c.selected_text, 40)) + '</div>'
-          + '<div class="card-body">' + esc(c.comment) + '</div>'
-          + '<div class="card-actions">'
-          + '<button class="card-btn card-copy" title="Copy">copy</button>'
-          + '<button class="card-btn card-edit" title="Edit">edit</button>'
-          + '<button class="card-btn card-delete" title="Delete">del</button>'
-          + '</div>';
-      }
-      marginCol.appendChild(card);
+  function restoreHighlights() {
+    comments.forEach(function(comment) {
+      applyHighlightFromOffsets(
+        comment.anchor.offset_start,
+        comment.anchor.offset_end,
+        comment.interaction_id,
+        comment.badge_label
+      );
     });
-    positionCards();
+    questions.forEach(function(question) {
+      applyHighlightFromOffsets(
+        question.anchor.offset_start,
+        question.anchor.offset_end,
+        question.interaction_id,
+        question.badge_label
+      );
+    });
+  }
+
+  function placeCursorAtInteraction(interactionId) {
+    const mark = contentEl.querySelector('mark.hl[data-key="' + interactionId + '"]');
+    if (!mark) return;
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(mark);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function setActiveInteraction(interactionId) {
+    if (activeInteractionId === interactionId) return;
+    activeInteractionId = interactionId;
+
+    marginCol.querySelectorAll(".margin-card").forEach(function(card) {
+      card.classList.toggle("active", card.dataset.key === interactionId);
+    });
+
+    contentEl.querySelectorAll("mark.hl").forEach(function(mark) {
+      mark.classList.toggle("hl-active", mark.dataset.key === interactionId);
+    });
+
+    commentsList.querySelectorAll(".comment-item").forEach(function(item) {
+      item.style.fontWeight = item.dataset.key === interactionId ? "bold" : "";
+    });
+    questionsList.querySelectorAll(".comment-item").forEach(function(item) {
+      item.style.fontWeight = item.dataset.key === interactionId ? "bold" : "";
+    });
   }
 
   function positionCards() {
@@ -869,211 +1176,155 @@ body.no-toc-empty .toc-toggle { display: none; }
     const positions = [];
 
     cards.forEach(function(card) {
-      const cid = card.dataset.cid;
-      const mark = contentEl.querySelector('mark.hl[data-cid="' + cid + '"]');
-      if (mark) {
-        positions.push({ card: card, top: mark.offsetTop });
-      } else {
-        positions.push({ card: card, top: 0 });
-      }
+      const interactionId = card.dataset.key;
+      const mark = contentEl.querySelector('mark.hl[data-key="' + interactionId + '"]');
+      positions.push({ card: card, top: mark ? mark.offsetTop : 0 });
     });
 
     positions.sort(function(a, b) { return a.top - b.top; });
 
     let prevBottom = 0;
-    positions.forEach(function(p) {
-      const top = Math.max(p.top, prevBottom);
-      p.card.style.top = top + "px";
-      prevBottom = top + p.card.offsetHeight + 8;
+    positions.forEach(function(position) {
+      const top = Math.max(position.top, prevBottom);
+      position.card.style.top = top + "px";
+      prevBottom = top + position.card.offsetHeight + 8;
     });
   }
 
-  function setActiveComment(cid) {
-    if (activeCommentId === cid) return;
-    activeCommentId = cid;
+  function renderCards() {
+    marginCol.innerHTML = "";
 
-    marginCol.querySelectorAll(".margin-card").forEach(function(c) {
-      c.classList.toggle("active", parseInt(c.dataset.cid) === cid);
-    });
+    getAllInteractions().forEach(function(item) {
+      const card = document.createElement("div");
+      card.className = "margin-card" + (item.interaction_id === activeInteractionId ? " active" : "");
+      card.dataset.key = item.interaction_id;
+      card.dataset.kind = item.kind;
 
-    contentEl.querySelectorAll("mark.hl").forEach(function(m) {
-      m.classList.toggle("hl-active", parseInt(m.dataset.cid) === cid);
-    });
-
-    commentsList.querySelectorAll(".comment-item").forEach(function(item) {
-      item.style.fontWeight = parseInt(item.dataset.cid) === cid ? "bold" : "";
-    });
-  }
-
-  // --- Comments CRUD ---
-  function addComment(info) {
-    const id = nextId++;
-    comments.push({
-      id: id,
-      section: info.section,
-      selected_text: info.selectedText,
-      comment: info.comment,
-      startOffset: info.startOff,
-      endOffset: info.endOff
-    });
-    highlightRange(info.range, id);
-    setActiveComment(id);
-    updateUI();
-    saveState();
-  }
-
-  function deleteComment(cid) {
-    comments = comments.filter(function(c) { return c.id !== cid; });
-    removeHighlight(cid);
-    if (activeCommentId === cid) activeCommentId = null;
-    updateUI();
-    saveState();
-  }
-
-  function editComment(cid) {
-    const c = comments.find(function(c) { return c.id === cid; });
-    if (!c) return;
-    c._editing = true;
-    renderCards();
-
-    const card = marginCol.querySelector('.margin-card[data-cid="' + cid + '"]');
-    if (card) {
-      const ta = card.querySelector(".card-edit-area");
-      if (ta) {
-        ta.style.height = "auto";
-        ta.style.height = Math.min(ta.scrollHeight + 4, 300) + "px";
-        ta.focus();
-        ta.setSelectionRange(0, 0);
-        ta.scrollTop = 0;
+      if (item.kind === "comment" && item.editing) {
+        card.innerHTML = '<div class="card-kind">Comment ' + esc(item.badge_label) + '</div>'
+          + '<div class="card-quote">' + esc(trunc(item.anchor.selected_text, 40)) + '</div>'
+          + '<textarea class="card-edit-area" rows="2">' + esc(item.comment) + '</textarea>'
+          + '<div class="card-edit-actions">'
+          + '<button class="btn card-save-btn" type="button">Save</button>'
+          + '<button class="btn card-cancel-btn" type="button">Cancel</button>'
+          + '</div>';
+      } else if (item.kind === "comment") {
+        card.innerHTML = '<div class="card-kind">Comment ' + esc(item.badge_label) + '</div>'
+          + '<div class="card-quote">' + esc(trunc(item.anchor.selected_text, 40)) + '</div>'
+          + '<div class="card-body">' + esc(item.comment) + '</div>'
+          + '<div class="card-actions">'
+          + '<button class="card-btn card-copy" title="Copy">copy</button>'
+          + '<button class="card-btn card-edit" title="Edit">edit</button>'
+          + '<button class="card-btn card-delete" title="Delete">del</button>'
+          + '</div>';
+      } else {
+        card.innerHTML = '<div class="card-kind">Ask ' + esc(item.badge_label) + '</div>'
+          + '<div class="card-quote">' + esc(trunc(item.anchor.selected_text, 40)) + '</div>'
+          + '<div class="card-body">? ' + esc(item.question) + '</div>'
+          + (item.answer
+            ? '<div class="card-answer">' + esc(item.answer) + '</div>'
+            : '<div class="card-loading">Waiting for answer\\u2026</div>');
       }
-    }
-  }
 
-  function placeCursorAtComment(cid) {
-    const mark = contentEl.querySelector('mark.hl[data-cid="' + cid + '"]');
-    if (mark) {
-      const sel = window.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(mark);
-      range.collapse(false);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }
-  }
+      marginCol.appendChild(card);
+    });
 
-  function saveEdit(cid) {
-    const card = marginCol.querySelector('.margin-card[data-cid="' + cid + '"]');
-    const ta = card && card.querySelector(".card-edit-area");
-    const c = comments.find(function(c) { return c.id === cid; });
-    if (!c || !ta) return;
-    const val = ta.value.trim();
-    if (val) { c.comment = val; }
-    delete c._editing;
-    updateUI();
-    saveState();
-    placeCursorAtComment(cid);
-    contentEl.focus();
-  }
-
-  function cancelEdit(cid) {
-    const c = comments.find(function(c) { return c.id === cid; });
-    if (c) delete c._editing;
-    renderCards();
-    placeCursorAtComment(cid);
-    contentEl.focus();
+    positionCards();
   }
 
   function updateUI() {
-    const count = comments.length;
-    commentCountEl.textContent = count;
-    commentCountTop.textContent = count + " comment" + (count !== 1 ? "s" : "");
-    commentsSection.hidden = count === 0;
+    const commentCount = comments.length;
+    const questionCount = questions.length;
 
-    let html = "";
-    comments.forEach(function(c) {
-      html += '<div class="comment-item" data-cid="' + c.id + '">';
-      html += '<div class="comment-header">';
-      html += '<span class="badge">' + c.id + '</span>';
-      if (c.section) {
-        const sectionName = c.section.replace(/^#+\\s*/, "");
-        html += ' <span class="comment-section">\\u00a7 ' + esc(trunc(sectionName, 30)) + '</span> \\u2014 ';
+    commentCountEl.textContent = commentCount;
+    questionCountEl.textContent = questionCount;
+    let topText =
+      commentCount + " comment" + (commentCount !== 1 ? "s" : "") +
+      (questionCount ? " · " + questionCount + " ask" + (questionCount !== 1 ? "s" : "") : "");
+    if (connectionStatus) {
+      topText += " · " + connectionStatus;
+    }
+    commentCountTop.textContent = topText;
+
+    commentsSection.hidden = commentCount === 0;
+    questionsSection.hidden = questionCount === 0;
+
+    let commentsHtml = "";
+    comments.forEach(function(comment) {
+      commentsHtml += '<div class="comment-item" data-key="' + esc(comment.interaction_id) + '">';
+      commentsHtml += '<div class="comment-header">';
+      commentsHtml += '<span class="badge">' + esc(comment.badge_label) + '</span>';
+      if (comment.anchor.section) {
+        const sectionName = comment.anchor.section.replace(/^#+\\s*/, "");
+        commentsHtml += '<span class="comment-section">\\u00a7 ' + esc(trunc(sectionName, 30)) + '</span> \\u2014 ';
       }
-      html += '<span class="comment-quote">\\u201c' + esc(trunc(c.selected_text, 50)) + '\\u201d</span>';
-      html += '</div>';
-      html += '<div class="comment-body">\\u2192 ' + esc(c.comment) + '</div>';
-      html += '</div>';
+      commentsHtml += '<span class="comment-quote">\\u201c' + esc(trunc(comment.anchor.selected_text, 50)) + '\\u201d</span>';
+      commentsHtml += '</div>';
+      commentsHtml += '<div class="comment-body">\\u2192 ' + esc(comment.comment) + '</div>';
+      commentsHtml += '</div>';
     });
-    commentsList.innerHTML = html;
+    commentsList.innerHTML = commentsHtml;
+
+    let questionsHtml = "";
+    questions.forEach(function(question) {
+      questionsHtml += '<div class="comment-item" data-key="' + esc(question.interaction_id) + '">';
+      questionsHtml += '<div class="comment-header">';
+      questionsHtml += '<span class="badge">' + esc(question.badge_label) + '</span>';
+      if (question.anchor.section) {
+        const sectionName = question.anchor.section.replace(/^#+\\s*/, "");
+        questionsHtml += '<span class="comment-section">\\u00a7 ' + esc(trunc(sectionName, 30)) + '</span> \\u2014 ';
+      }
+      questionsHtml += '<span class="comment-quote">\\u201c' + esc(trunc(question.anchor.selected_text, 50)) + '\\u201d</span>';
+      questionsHtml += '</div>';
+      questionsHtml += '<div class="comment-body">? ' + esc(question.question) + '</div>';
+      questionsHtml += '<div class="comment-answer">' + esc(question.answer || "Waiting for answer\\u2026") + '</div>';
+      questionsHtml += '</div>';
+    });
+    questionsList.innerHTML = questionsHtml;
 
     renderCards();
+    setAskDisabled();
   }
 
-  // --- Persistence ---
-  function saveState() {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify({
-        comments: comments.map(function(c) {
-          return {
-            id: c.id,
-            section: c.section,
-            selected_text: c.selected_text,
-            comment: c.comment,
-            startOffset: c.startOffset,
-            endOffset: c.endOffset
-          };
-        }),
-        nextId: nextId,
-        generalFeedback: generalFeedback.value
-      }));
-    } catch(e) {}
-  }
-
-  function loadState() {
-    try {
-      const data = JSON.parse(localStorage.getItem(storageKey));
-      if (!data) return;
-      if (data.generalFeedback) generalFeedback.value = data.generalFeedback;
-      if (data.comments && data.comments.length) {
-        nextId = data.nextId || 1;
-        data.comments.forEach(function(c) {
-          comments.push(c);
-          applyHighlightFromOffsets(c.startOffset, c.endOffset, c.id);
-        });
-        updateUI();
-      }
-    } catch(e) {}
-  }
-
-  // --- Popup ---
-  function showPopupButton(range) {
+  function showPopup(range) {
     currentRange = range.cloneRange();
     const rect = range.getBoundingClientRect();
-    popup.style.left = Math.min(rect.right + 4, window.innerWidth - 120) + "px";
+    popup.style.left = Math.min(rect.right + 4, window.innerWidth - 240) + "px";
     popup.style.top = (rect.bottom + 4) + "px";
-    popupBtn.hidden = false;
+    popupModeButtons.hidden = false;
     popupForm.hidden = true;
     popup.classList.add("visible");
+    setAskDisabled();
   }
 
-  function expandPopup() {
+  function expandPopup(mode) {
     if (!currentRange) return;
-    const text = currentRange.toString().trim();
+    if (mode === "ask" && !canStartAsk()) return;
+
+    const text = getPlainRangeText(currentRange).trim();
     if (!text) return;
+
+    popupMode = mode;
     popupQuote.textContent = trunc(text, 120);
-    popupBtn.hidden = true;
+    popupModeButtons.hidden = true;
     popupForm.hidden = false;
     popupText.value = "";
+    popupText.placeholder = mode === "ask" ? "Ask about this selection\\u2026" : "Your thought\\u2026";
+    popupSubmit.textContent = mode === "ask" ? "Ask" : "Add";
 
     requestAnimationFrame(function() {
-      const r = popup.getBoundingClientRect();
-      if (r.bottom > window.innerHeight - 8) popup.style.top = Math.max(8, window.innerHeight - r.height - 8) + "px";
-      if (r.right > window.innerWidth - 8) popup.style.left = Math.max(8, window.innerWidth - r.width - 8) + "px";
+      const rect = popup.getBoundingClientRect();
+      if (rect.bottom > window.innerHeight - 8) popup.style.top = Math.max(8, window.innerHeight - rect.height - 8) + "px";
+      if (rect.right > window.innerWidth - 8) popup.style.left = Math.max(8, window.innerWidth - rect.width - 8) + "px";
       popupText.focus();
     });
   }
 
   function hidePopup(restoreSelection) {
     popup.classList.remove("visible");
+    popupModeButtons.hidden = false;
+    popupForm.hidden = true;
+    popupText.value = "";
     if (restoreSelection && currentRange) {
       try {
         const sel = window.getSelection();
@@ -1084,71 +1335,200 @@ body.no-toc-empty .toc-toggle { display: none; }
     currentRange = null;
   }
 
+  function focusAfterInteraction(interactionId) {
+    const marks = contentEl.querySelectorAll('mark.hl[data-key="' + interactionId + '"]');
+    if (!marks.length) return;
+    const lastMark = marks[marks.length - 1];
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.setStartAfter(lastMark);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function addComment(range, text) {
+    const anchor = buildAnchorFromRange(range);
+    if (!anchor) return null;
+
+    const comment = {
+      interaction_id: makeId("comment"),
+      badge_label: String(nextCommentNumber++),
+      anchor: anchor,
+      comment: text,
+      _editing: false,
+    };
+
+    comments.push(comment);
+    highlightRange(range, comment.interaction_id, comment.badge_label);
+    setActiveInteraction(comment.interaction_id);
+    updateUI();
+    return comment;
+  }
+
+  function saveCommentToServer(comment) {
+    return postEvent({
+      type: "comment_upsert",
+      interaction_id: comment.interaction_id,
+      badge_label: comment.badge_label,
+      anchor: comment.anchor,
+      comment: comment.comment,
+    });
+  }
+
+  function deleteComment(interactionId) {
+    comments = comments.filter(function(comment) { return comment.interaction_id !== interactionId; });
+    removeHighlight(interactionId);
+    if (activeInteractionId === interactionId) activeInteractionId = null;
+    updateUI();
+    postEvent({
+      type: "comment_delete",
+      interaction_id: interactionId,
+    }).catch(function(err) {
+      alert("Error: " + err.message);
+    });
+  }
+
+  function editComment(interactionId) {
+    const comment = getCommentById(interactionId);
+    if (!comment) return;
+    comment._editing = true;
+    renderCards();
+
+    const card = marginCol.querySelector('.margin-card[data-key="' + interactionId + '"]');
+    if (!card) return;
+    const textarea = card.querySelector(".card-edit-area");
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = Math.min(textarea.scrollHeight + 4, 300) + "px";
+    textarea.focus();
+    textarea.setSelectionRange(0, 0);
+    textarea.scrollTop = 0;
+  }
+
+  function saveCommentEdit(interactionId) {
+    const card = marginCol.querySelector('.margin-card[data-key="' + interactionId + '"]');
+    const textarea = card && card.querySelector(".card-edit-area");
+    const comment = getCommentById(interactionId);
+    if (!comment || !textarea) return;
+    const value = textarea.value.trim();
+    if (value) {
+      comment.comment = value;
+    }
+    delete comment._editing;
+    updateUI();
+    saveCommentToServer(comment).catch(function(err) {
+      alert("Error: " + err.message);
+    });
+    placeCursorAtInteraction(interactionId);
+    contentEl.focus();
+  }
+
+  function cancelCommentEdit(interactionId) {
+    const comment = getCommentById(interactionId);
+    if (comment) delete comment._editing;
+    renderCards();
+    placeCursorAtInteraction(interactionId);
+    contentEl.focus();
+  }
+
   function commitComment() {
     const text = popupText.value.trim();
     if (!text || !currentRange) return;
 
-    const selectedText = currentRange.toString().trim();
-    const section = findSection(currentRange.startContainer);
-    const startOff = getCharOffset(currentRange.startContainer, currentRange.startOffset);
-    const endOff = startOff + currentRange.toString().length;
-
     const savedScrollTop = scrollArea.scrollTop;
+    const comment = addComment(currentRange, text);
+    if (!comment) return;
 
-    addComment({
-      section: section,
-      selectedText: selectedText,
-      comment: text,
-      startOff: startOff,
-      endOff: endOff,
-      range: currentRange
-    });
-
-    const newId = comments[comments.length - 1].id;
     hidePopup(false);
-
-    // Place cursor after the highlight so arrow keys continue from here
-    const marks = contentEl.querySelectorAll('mark.hl[data-cid="' + newId + '"]');
-    if (marks.length) {
-      const lastMark = marks[marks.length - 1];
-      const sel = window.getSelection();
-      const range = document.createRange();
-      range.setStartAfter(lastMark);
-      range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }
-
+    focusAfterInteraction(comment.interaction_id);
     scrollArea.scrollTop = savedScrollTop;
     contentEl.focus();
+
+    saveCommentToServer(comment).catch(function(err) {
+      comments = comments.filter(function(entry) { return entry.interaction_id !== comment.interaction_id; });
+      removeHighlight(comment.interaction_id);
+      updateUI();
+      alert("Error: " + err.message);
+    });
   }
 
-  // --- Keyboard: navigate between comments ---
-  function getCommentMarks() {
+  function commitQuestion() {
+    const text = popupText.value.trim();
+    if (!text || !currentRange || !canStartAsk()) return;
+
+    const anchor = buildAnchorFromRange(currentRange);
+    if (!anchor) return;
+
+    const interactionId = makeId("question");
+    const question = {
+      interaction_id: interactionId,
+      badge_label: "Q" + (nextQuestionNumber++),
+      anchor: anchor,
+      question: text,
+      answer: "",
+    };
+
+    questions.push(question);
+    pendingInteractionId = interactionId;
+    highlightRange(currentRange, interactionId, question.badge_label);
+    setActiveInteraction(interactionId);
+    updateUI();
+    hidePopup(false);
+    focusAfterInteraction(interactionId);
+    contentEl.focus();
+
+    postEvent({
+      type: "question",
+      interaction_id: question.interaction_id,
+      badge_label: question.badge_label,
+      anchor: question.anchor,
+      question: question.question,
+    }).catch(function(err) {
+      questions = questions.filter(function(entry) { return entry.interaction_id !== interactionId; });
+      pendingInteractionId = null;
+      removeHighlight(interactionId);
+      updateUI();
+      alert("Error: " + err.message);
+    });
+  }
+
+  function commitPopup() {
+    if (popupMode === "ask") {
+      commitQuestion();
+      return;
+    }
+    commitComment();
+  }
+
+  function getInteractionMarks() {
     const seen = {};
     const marks = [];
-    contentEl.querySelectorAll("mark.hl").forEach(function(m) {
-      const cid = m.dataset.cid;
-      if (!seen[cid]) { seen[cid] = true; marks.push(m); }
+    contentEl.querySelectorAll("mark.hl").forEach(function(mark) {
+      const interactionId = mark.dataset.key;
+      if (!seen[interactionId]) {
+        seen[interactionId] = true;
+        marks.push(mark);
+      }
     });
     return marks;
   }
 
-  function jumpToComment(direction) {
-    const marks = getCommentMarks();
+  function jumpToInteraction(direction) {
+    const marks = getInteractionMarks();
     if (!marks.length) return;
 
     const sel = window.getSelection();
     const cursorNode = sel.focusNode;
-
     let currentIdx = -1;
+
     if (cursorNode) {
       let el = cursorNode.nodeType === 3 ? cursorNode.parentNode : cursorNode;
       while (el && el !== contentEl) {
         if (el.tagName === "MARK" && el.classList.contains("hl")) {
-          const cid = el.dataset.cid;
+          const interactionId = el.dataset.key;
           for (let i = 0; i < marks.length; i++) {
-            if (marks[i].dataset.cid === cid) { currentIdx = i; break; }
+            if (marks[i].dataset.key === interactionId) { currentIdx = i; break; }
           }
           break;
         }
@@ -1156,18 +1536,15 @@ body.no-toc-empty .toc-toggle { display: none; }
       }
     }
 
-    let targetIdx;
-    if (direction === "next") {
-      targetIdx = currentIdx < marks.length - 1 ? currentIdx + 1 : 0;
-    } else {
-      targetIdx = currentIdx > 0 ? currentIdx - 1 : marks.length - 1;
-    }
-
+    const targetIdx = direction === "next"
+      ? (currentIdx < marks.length - 1 ? currentIdx + 1 : 0)
+      : (currentIdx > 0 ? currentIdx - 1 : marks.length - 1);
     const mark = marks[targetIdx];
-    const cid = parseInt(mark.dataset.cid);
+    const interactionId = mark.dataset.key;
 
     let textNode = mark.querySelector(".badge") ? mark.childNodes[1] || mark.firstChild : mark.firstChild;
     if (!textNode) textNode = mark;
+
     const range = document.createRange();
     if (textNode.nodeType === 3) {
       range.setStart(textNode, 0);
@@ -1180,10 +1557,72 @@ body.no-toc-empty .toc-toggle { display: none; }
     sel.addRange(range);
 
     mark.scrollIntoView({ behavior: "smooth", block: "center" });
-    setActiveComment(cid);
+    setActiveInteraction(interactionId);
   }
 
-  // --- Selection change: track active comment ---
+  function scrollToInteraction(interactionId) {
+    const mark = contentEl.querySelector('mark.hl[data-key="' + interactionId + '"]');
+    if (!mark) return;
+    mark.scrollIntoView({ behavior: "smooth", block: "center" });
+    setActiveInteraction(interactionId);
+    placeCursorAtInteraction(interactionId);
+    contentEl.focus();
+  }
+
+  function submit() {
+    if (sent || reviewClosed) return;
+    if (pendingInteractionId) {
+      const pendingQuestion = getQuestionById(pendingInteractionId);
+      const pendingText = pendingQuestion?.question
+        ? '"' + trunc(pendingQuestion.question, 140) + '"'
+        : "this pending question";
+      const shouldSubmit = window.confirm(
+        "A question is still waiting for an answer:\\n\\n" +
+          pendingText +
+          "\\n\\nSubmit anyway? The unanswered question will still be included in the final review."
+      );
+      if (!shouldSubmit) {
+        return;
+      }
+    }
+    sent = true;
+    sub.disabled = true;
+    subTop.disabled = true;
+    sub.textContent = "\\u2026";
+    subTop.textContent = "\\u2026";
+
+    postEvent({
+      type: "submit",
+      general_feedback: generalFeedback.value.trim(),
+    })
+      .then(function() {
+        reviewClosed = true;
+        sseStopped = true;
+        connectionStatus = "";
+        stopEventSource();
+        showOverlayMessage("Submitted.", "You can close this tab.");
+        setTimeout(function() { try { window.close(); } catch(e) {} }, 600);
+      })
+      .catch(function(err) {
+        sent = false;
+        sub.disabled = false;
+        subTop.disabled = false;
+        sub.textContent = "Submit";
+        subTop.textContent = "Submit";
+        alert("Error: " + err.message);
+      });
+  }
+
+  comments = Array.isArray(hydration.comments) ? hydration.comments.map(normalizeComment) : [];
+  questions = Array.isArray(hydration.questions) ? hydration.questions.map(normalizeQuestion) : [];
+  nextCommentNumber = nextNumberFrom(comments, "") || 1;
+  nextQuestionNumber = nextNumberFrom(questions, "Q") || 1;
+  generalFeedback.value = String(hydration.general_feedback || "");
+
+  restoreHighlights();
+  updateUI();
+  connectEventSource();
+
   document.addEventListener("selectionchange", function() {
     if (document.activeElement !== contentEl) return;
     const sel = window.getSelection();
@@ -1192,94 +1631,49 @@ body.no-toc-empty .toc-toggle { display: none; }
     let el = sel.focusNode.nodeType === 3 ? sel.focusNode.parentNode : sel.focusNode;
     while (el && el !== contentEl) {
       if (el.tagName === "MARK" && el.classList.contains("hl")) {
-        setActiveComment(parseInt(el.dataset.cid));
+        setActiveInteraction(el.dataset.key);
         return;
       }
       el = el.parentNode;
     }
-    setActiveComment(null);
+    setActiveInteraction(null);
   });
 
-  // --- Submit ---
-  function submit() {
-    if (sent) return;
-    sent = true;
-    sub.disabled = true;
-    subTop.disabled = true;
-    sub.textContent = "\\u2026";
-    subTop.textContent = "\\u2026";
-
-    const payload = {
-      comments: comments.map(function(c) {
-        const obj = { selected_text: c.selected_text, comment: c.comment };
-        if (c.section) obj.section = c.section;
-        return obj;
-      }),
-      general_feedback: generalFeedback.value.trim()
-    };
-    if (!payload.comments.length) delete payload.comments;
-    if (!payload.general_feedback) delete payload.general_feedback;
-
-    fetch("/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    })
-    .then(function(res) {
-      if (!res.ok) throw new Error(res.status);
-      overlay.style.display = "flex";
-      try { localStorage.removeItem(storageKey); } catch(e) {}
-      setTimeout(function() { try { window.close(); } catch(e) {} }, 600);
-    })
-    .catch(function(e) {
-      sent = false;
-      sub.disabled = false;
-      subTop.disabled = false;
-      sub.textContent = "Submit";
-      subTop.textContent = "Submit";
-      alert("Error: " + e.message);
-    });
-  }
-
-  // --- Event Listeners ---
-
-  // Selection -> popup button (mouse-based)
   contentEl.addEventListener("mouseup", function() {
     setTimeout(function() {
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed && contentEl.contains(sel.anchorNode)) {
-        showPopupButton(sel.getRangeAt(0));
+        showPopup(sel.getRangeAt(0));
       }
     }, 10);
   });
 
-  popupBtn.addEventListener("click", function(e) { e.stopPropagation(); expandPopup(); });
-  popupAdd.addEventListener("click", function(e) { e.stopPropagation(); commitComment(); });
+  popupCommentBtn.addEventListener("click", function(e) { e.stopPropagation(); expandPopup("comment"); });
+  popupAskBtn.addEventListener("click", function(e) { e.stopPropagation(); expandPopup("ask"); });
+  popupSubmit.addEventListener("click", function(e) { e.stopPropagation(); commitPopup(); });
   popupCancel.addEventListener("click", function(e) { e.stopPropagation(); hidePopup(true); contentEl.focus(); });
 
   popupText.addEventListener("keydown", function(e) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitComment(); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); commitPopup(); }
     if (e.key === "Escape") { e.preventDefault(); hidePopup(true); contentEl.focus(); }
   });
 
-  // Click outside popup
   document.addEventListener("mousedown", function(e) {
     if (popup.classList.contains("visible") && !popup.contains(e.target)) hidePopup(true);
   });
 
-  // Margin card events (delegated)
   marginCol.addEventListener("click", function(e) {
     const card = e.target.closest(".margin-card");
     if (!card) return;
-
     if (e.target.closest(".card-edit-area")) return;
 
-    const cid = parseInt(card.dataset.cid);
+    const interactionId = card.dataset.key;
+    const kind = card.dataset.kind;
 
-    if (e.target.closest(".card-copy")) {
-      const c = comments.find(function(c) { return c.id === cid; });
-      if (c) {
-        navigator.clipboard.writeText(c.comment).then(function() {
+    if (kind === "comment" && e.target.closest(".card-copy")) {
+      const comment = getCommentById(interactionId);
+      if (comment) {
+        navigator.clipboard.writeText(comment.comment).then(function() {
           const btn = card.querySelector(".card-copy");
           if (btn) { btn.textContent = "ok"; setTimeout(function() { btn.textContent = "copy"; }, 1200); }
         });
@@ -1287,55 +1681,34 @@ body.no-toc-empty .toc-toggle { display: none; }
       return;
     }
 
-    if (e.target.closest(".card-delete")) { deleteComment(cid); contentEl.focus(); return; }
-    if (e.target.closest(".card-edit")) { editComment(cid); return; }
-    if (e.target.closest(".card-save-btn")) { saveEdit(cid); return; }
-    if (e.target.closest(".card-cancel-btn")) { cancelEdit(cid); return; }
+    if (kind === "comment" && e.target.closest(".card-delete")) { deleteComment(interactionId); contentEl.focus(); return; }
+    if (kind === "comment" && e.target.closest(".card-edit")) { editComment(interactionId); return; }
+    if (kind === "comment" && e.target.closest(".card-save-btn")) { saveCommentEdit(interactionId); return; }
+    if (kind === "comment" && e.target.closest(".card-cancel-btn")) { cancelCommentEdit(interactionId); return; }
 
-    // Click card body -> scroll to highlight
-    const mark = contentEl.querySelector('mark.hl[data-cid="' + cid + '"]');
-    if (mark) {
-      mark.scrollIntoView({ behavior: "smooth", block: "center" });
-      setActiveComment(cid);
-
-      const sel = window.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(mark);
-      range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      contentEl.focus();
-    }
+    scrollToInteraction(interactionId);
   });
 
-  // Card edit textarea keydown
   marginCol.addEventListener("keydown", function(e) {
-    const ta = e.target.closest(".card-edit-area");
-    if (!ta) return;
-    const card = ta.closest(".margin-card");
-    const cid = parseInt(card.dataset.cid);
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); saveEdit(cid); }
-    if (e.key === "Escape") { e.preventDefault(); cancelEdit(cid); }
+    const textarea = e.target.closest(".card-edit-area");
+    if (!textarea) return;
+    const card = textarea.closest(".margin-card");
+    const interactionId = card.dataset.key;
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); saveCommentEdit(interactionId); }
+    if (e.key === "Escape") { e.preventDefault(); cancelCommentEdit(interactionId); }
   });
 
-  // Summary list click -> scroll to highlight + activate card
-  commentsList.addEventListener("click", function(e) {
+  function handleSummaryClick(e) {
     const item = e.target.closest(".comment-item");
     if (!item) return;
-    const cid = parseInt(item.dataset.cid);
-    const mark = contentEl.querySelector('mark.hl[data-cid="' + cid + '"]');
-    if (mark) {
-      mark.scrollIntoView({ behavior: "smooth", block: "center" });
-      setActiveComment(cid);
-      placeCursorAtComment(cid);
-      contentEl.focus();
-    }
-  });
+    scrollToInteraction(item.dataset.key);
+  }
 
-  // General feedback persistence
-  generalFeedback.addEventListener("input", function() { saveState(); });
+  commentsList.addEventListener("click", handleSummaryClick);
+  questionsList.addEventListener("click", handleSummaryClick);
 
-  // Tab from content to general feedback
+  generalFeedback.addEventListener("input", scheduleFeedbackSync);
+
   contentEl.addEventListener("keydown", function(e) {
     if (e.key === "Tab" && !e.shiftKey) {
       e.preventDefault();
@@ -1349,7 +1722,6 @@ body.no-toc-empty .toc-toggle { display: none; }
     }
   });
 
-  // Global keyboard shortcuts
   document.addEventListener("keydown", function(e) {
     const inTextarea = e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT";
     const inCardEdit = e.target.closest(".card-edit-area");
@@ -1358,27 +1730,38 @@ body.no-toc-empty .toc-toggle { display: none; }
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed && contentEl.contains(sel.anchorNode)) {
         e.preventDefault();
-        if (!currentRange) showPopupButton(sel.getRangeAt(0));
-        expandPopup();
+        if (!currentRange) showPopup(sel.getRangeAt(0));
+        expandPopup("comment");
+      }
+    }
+
+    if (e.key === "a" && !e.metaKey && !e.ctrlKey && !e.altKey && !inTextarea && !inCardEdit && canStartAsk()) {
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && contentEl.contains(sel.anchorNode)) {
+        e.preventDefault();
+        if (!currentRange) showPopup(sel.getRangeAt(0));
+        expandPopup("ask");
       }
     }
 
     if ((e.key === "n" || e.key === "p") && !e.metaKey && !e.ctrlKey && !e.altKey && !inTextarea && !inCardEdit) {
       e.preventDefault();
-      jumpToComment(e.key === "n" ? "next" : "prev");
+      jumpToInteraction(e.key === "n" ? "next" : "prev");
     }
 
     if (e.key === "e" && !e.metaKey && !e.ctrlKey && !e.altKey && !inTextarea && !inCardEdit) {
-      if (activeCommentId) {
+      const activeComment = getActiveEditableComment();
+      if (activeComment) {
         e.preventDefault();
-        editComment(activeCommentId);
+        editComment(activeComment.interaction_id);
       }
     }
 
     if ((e.key === "d" || e.key === "Backspace") && !e.metaKey && !e.ctrlKey && !e.altKey && !inTextarea && !inCardEdit) {
-      if (activeCommentId) {
+      const activeComment = getActiveEditableComment();
+      if (activeComment) {
         e.preventDefault();
-        deleteComment(activeCommentId);
+        deleteComment(activeComment.interaction_id);
         contentEl.focus();
       }
     }
@@ -1395,23 +1778,16 @@ body.no-toc-empty .toc-toggle { display: none; }
 
     if (e.key === "Escape") {
       if (popup.classList.contains("visible")) { hidePopup(true); contentEl.focus(); }
-      else if (inCardEdit) { /* handled by card keydown */ }
-      else { window.getSelection().removeAllRanges(); setActiveComment(null); }
+      else if (inCardEdit) { /* handled above */ }
+      else { window.getSelection().removeAllRanges(); setActiveInteraction(null); }
     }
   });
 
-  // Submit buttons
   sub.addEventListener("click", submit);
   subTop.addEventListener("click", submit);
 
-  // Focus content on load for immediate keyboard nav
   contentEl.focus();
-
-  // Reposition cards on resize
   window.addEventListener("resize", function() { positionCards(); });
-
-  // --- Init ---
-  loadState();
 })();
 </script>
 </body>

@@ -1,7 +1,12 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import { buildPdfHtml } from "./html/pdf.js";
 import { log } from "./logger.js";
+import {
+  resolveChromeExecutable,
+  resolveMarkdownContent,
+  resolvePdfOutputPath,
+  stripLeadingTitleHeading,
+} from "./documents.js";
+import { renderMarkdownToHtml } from "./markdown.js";
 
 /**
  * Converts a markdown file (or raw content) to a beautiful PDF.
@@ -15,64 +20,19 @@ import { log } from "./logger.js";
 export async function markdownToPdf({ title, content, filePath, outputPath, subtitle }) {
   log(`markdownToPdf: "${title}"`);
 
-  let markdown = content;
-  if (!markdown && filePath) {
-    markdown = await fs.readFile(filePath, "utf-8");
-  }
-  if (!markdown) {
-    throw new Error("Either content or filePath must be provided");
-  }
+  const markdown = stripLeadingTitleHeading(
+    await resolveMarkdownContent({ content, filePath }),
+    title
+  );
+  const outPath = resolvePdfOutputPath({ title, filePath, outputPath });
+  let contentHtml = null;
 
-  // Strip the first markdown heading if it matches the title (avoid double heading)
-  const firstHeadingMatch = markdown.match(/^#\s+(.+)\n/);
-  if (firstHeadingMatch) {
-    const headingText = firstHeadingMatch[1].trim();
-    // Fuzzy match — strip bold markers and compare
-    const clean = (s) => s.replace(/\*\*/g, "").replace(/[—–-]+/g, " ").trim().toLowerCase();
-    if (clean(headingText).includes(clean(title).slice(0, 20)) || clean(title).includes(clean(headingText).slice(0, 20))) {
-      markdown = markdown.slice(firstHeadingMatch[0].length);
-    }
-  }
+  try {
+    contentHtml = await renderMarkdownToHtml(markdown);
+  } catch {}
 
-  // Determine output path
-  let outPath = outputPath;
-  if (!outPath && filePath) {
-    outPath = filePath.replace(/\.md$/i, ".pdf");
-  }
-  if (!outPath) {
-    outPath = path.join(process.cwd(), `${title.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`);
-  }
-  outPath = path.resolve(outPath);
-
-  // Build HTML
-  const html = buildPdfHtml({ title, content: markdown, subtitle });
-
-  // Find Chrome
-  const chromePaths = [
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/usr/bin/google-chrome-stable",
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium-browser",
-    "/usr/bin/chromium",
-  ];
-
-  let executablePath = null;
-  for (const p of chromePaths) {
-    try {
-      await fs.access(p);
-      executablePath = p;
-      break;
-    } catch {}
-  }
-
-  if (!executablePath) {
-    throw new Error("Chrome not found. Install Google Chrome or set CHROME_PATH env var.");
-  }
-
-  // Override with env var if set
-  if (process.env.CHROME_PATH) {
-    executablePath = process.env.CHROME_PATH;
-  }
+  const html = buildPdfHtml({ title, content: markdown, contentHtml, subtitle });
+  const executablePath = await resolveChromeExecutable();
 
   // Launch headless Chrome via puppeteer-core
   const puppeteer = await import("puppeteer-core");
@@ -85,11 +45,8 @@ export async function markdownToPdf({ title, content, filePath, outputPath, subt
   try {
     const page = await browser.newPage();
 
-    // Set content and wait for marked.js to render
+    // Set content and wait for the page to finish loading
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 15000 });
-
-    // Small delay to ensure marked.js has parsed
-    await new Promise((r) => setTimeout(r, 500));
 
     // Generate PDF
     await page.pdf({
