@@ -2,8 +2,12 @@
   "name": "centaur",
   "version": "0.1.0",
   "type": "module",
-  "private": true,
-  "description": "Browser-based UI companion for terminal coding agents. The light-filled space between you and your terminal.",
+  "description": "Browser-based UI companion for terminal coding agents. Review documents, collect structured input, and export PDFs — all in the browser.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shlokkhemani/centaur.git"
+  },
   "bin": {
     "centaur-mcp": "./bin/mcp-server.js"
   },

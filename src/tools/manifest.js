@@ -48,10 +48,10 @@ export const toolDefinitions = [
     name: "ask_questions",
     label: "Ask Questions",
     description:
-      "Opens a document-style questionnaire in the user's browser. " +
-      "All questions are displayed on a single page so the user can read everything, " +
-      "answer in any order, revise freely, and submit when ready. " +
-      "Use this instead of asking questions one at a time when you have multiple questions or need detailed answers.",
+      "Opens a structured questionnaire in the user's browser with all questions on one page. " +
+      "Use when you need the human to make choices or fill in multiple fields — e.g. project preferences, " +
+      "config options, prioritisation. Supports text, single-choice, and multi-choice inputs. " +
+      "If the main goal is to share a document for the human to read and comment on, use review_document instead.",
     input: objectField({
       title: stringField("Document heading shown at top of page"),
       description: stringField("Context paragraph displayed below the heading", {
@@ -70,10 +70,13 @@ export const toolDefinitions = [
     name: "review_document",
     label: "Review Document",
     description:
-      "Opens a document in the browser for inline review. " +
-      "This is a multi-turn tool: the user can leave local comments, ask inline questions, " +
-      "and eventually submit the review. If the tool returns status='question', answer it " +
-      "and call respond_to_review with the same session_id and interaction_id until status='complete' or status='session_closed'.",
+      "Opens a document in the browser for the human to read, comment on, and collaborate with you inline. " +
+      "This is your default tool for sharing plans, specs, reports, proposals, and other prose documents " +
+      "with the human before proceeding. Prefer this over dumping long text into chat. " +
+      "Multi-turn: the human can leave inline comments, ask questions, and request edits. " +
+      "If the result has status='question', answer it via respond_to_review with type='answer'. " +
+      "If status='edit_request', propose replacement text via respond_to_review with type='edit_proposal'. " +
+      "Continue the loop until status='complete' or status='session_closed'.",
     input: objectField({
       title: stringField("Document heading"),
       content: stringField("Raw markdown text to review", { optional: true }),
@@ -96,9 +99,9 @@ export const toolDefinitions = [
     name: "respond_to_review",
     label: "Respond To Review",
     description:
-      "Sends an answer or edit proposal back to an active review session and waits for the next review interaction. " +
-      "Use this after review_document returns status='question' or status='edit_request'. " +
-      "Keep answers concise: a few sentences is ideal unless the user's question requires depth.",
+      "Sends your answer or edit proposal back to an active review session and waits for the next interaction. " +
+      "Called after review_document returns status='question' or status='edit_request'. " +
+      "Keep responses concise — a few sentences unless the question demands depth.",
     input: objectField({
       session_id: stringField("Active review session ID"),
       interaction_id: stringField("Interaction ID returned by review_document"),
@@ -122,10 +125,8 @@ export const toolDefinitions = [
     name: "export_pdf",
     label: "Export PDF",
     description:
-      "Converts a markdown file to a beautifully formatted PDF. " +
-      "Uses the same visual language as the review tool — monospace, clean tables, " +
-      "proper headings, code blocks. Output is print-ready with page numbers. " +
-      "Use when the user wants to share a report, plan, or document as a PDF.",
+      "Converts markdown to a print-ready PDF with clean typography, tables, code blocks, and page numbers. " +
+      "Use when the human wants a shareable document file. Accepts a .md file path or raw markdown content.",
     input: objectField({
       title: stringField("Document title (shown at top of PDF)"),
       file_path: stringField("Path to a .md file to convert", { optional: true }),

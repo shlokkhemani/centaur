@@ -3,7 +3,7 @@
  *
  * Layout: CSS Grid body with 3 visual columns (TOC | Content | Margin).
  * Content + Margin share a scroll container so comment cards stay aligned
- * with their highlights. Full keyboard navigation via contenteditable.
+ * with their highlights. Full keyboard navigation uses a focusable document surface.
  */
 
 import { escapeHtml, serializeForInlineScript } from "../utils.js";
@@ -85,6 +85,11 @@ body {
 }
 .topbar-left { display: flex; align-items: baseline; gap: 16px; min-width: 0; }
 .topbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.theme-toggle {
+  background: none; border: none; color: var(--fg-faint); font-size: 16px;
+  cursor: pointer; padding: 2px 4px; line-height: 1;
+}
+.theme-toggle:hover { color: var(--fg); }
 .title { font-size: 13px; font-weight: bold; color: var(--fg-bold); white-space: nowrap; }
 .desc { color: var(--fg-dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meta { color: var(--fg-faint); font-size: 11px; white-space: nowrap; }
@@ -98,7 +103,7 @@ body {
   font-size: 12px;
   cursor: pointer;
 }
-.btn:hover { background: var(--btn-hover); }
+.btn:hover:not(:disabled) { background: var(--btn-hover); }
 .btn:active { background: var(--btn-active); }
 .btn:disabled { opacity: 0.4; cursor: default; }
 
@@ -210,10 +215,31 @@ mark.hl {
   cursor: pointer;
 }
 mark.hl.hl-active { background: rgba(136,136,136,0.35); }
+mark.hl-edit {
+  background: transparent;
+  color: inherit;
+  border-radius: 2px;
+  position: relative;
+  cursor: pointer;
+  border-bottom: 1.5px dashed var(--fg-faint);
+}
+mark.hl-edit.hl-active { border-bottom-color: var(--accent); }
 mark.hl-pending {
   background: var(--hl-bg);
   color: inherit;
   border-radius: 2px;
+}
+.diff-del {
+  text-decoration: line-through;
+  color: var(--fg-faint);
+  opacity: 0.6;
+}
+.diff-ins {
+  display: inline;
+  margin-left: 4px;
+  padding: 0 2px;
+  background: rgba(100,180,100,0.08);
+  border-bottom: 1px dashed rgba(100,180,100,0.4);
 }
 .badge {
   display: inline-block;
@@ -342,6 +368,15 @@ mark.hl-pending {
   white-space: pre-wrap;
   word-break: break-word;
 }
+.edit-summary {
+  margin-top: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.edit-state {
+  margin-top: 6px;
+  color: var(--fg-dim);
+}
 .card-followup {
   margin-top: 8px;
   padding-top: 8px;
@@ -369,11 +404,11 @@ mark.hl-pending {
   line-height: 1;
   transition: color 0.15s;
 }
-.text-action:hover { color: var(--fg-dim); }
+.text-action:hover:not(:disabled) { color: var(--fg-dim); }
 .text-action.primary {
   color: var(--fg-dim);
 }
-.text-action.primary:hover {
+.text-action.primary:hover:not(:disabled) {
   color: var(--fg-bold);
 }
 .text-action:disabled {
@@ -494,9 +529,27 @@ mark.hl-pending {
 .popup-text:focus { outline: none; border-color: var(--border-focus); }
 .popup-actions { display: flex; align-items: center; gap: 4px; }
 .popup-actions .btn { background: none; border: none; color: var(--fg-faint); font-size: 11px; padding: 3px 8px; border-radius: 3px; }
-.popup-actions .btn:hover { color: var(--fg-dim); background: var(--hl-bg); }
+.popup-actions .btn:hover:not(:disabled) { color: var(--fg-dim); background: var(--hl-bg); }
 .popup-btn-cancel { }
 .popup-btn-primary { color: var(--fg-dim) !important; }
+
+/* --- Selection action button --- */
+.sel-action {
+  display: none;
+  position: fixed;
+  z-index: 45;
+  background: var(--btn-bg);
+  color: var(--fg-bold);
+  border: 1px solid var(--btn-border);
+  border-radius: 3px;
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sel-action:hover { background: var(--hl-bg); }
+.sel-action.visible { display: block; }
 
 /* --- Bottom bar --- */
 .botbar {
@@ -566,6 +619,15 @@ body.no-toc .toc { opacity: 0; pointer-events: none; border-right-color: transpa
 body.no-toc-empty { grid-template-columns: 1fr; }
 body.no-toc-empty .toc { display: none; }
 body.no-toc-empty .toc-toggle { display: none; }
+
+/* --- Print --- */
+@media print {
+  .topbar, .botbar, .toc, .margin-col, .popup, .sel-action, #overlay,
+  .feedback-section, #annotations-section { display: none !important; }
+  body { display: block; }
+  .scroll-area { overflow: visible; }
+  .content-col { max-width: 100%; padding: 0; }
+}
 </style>
 </head>
 <body>
@@ -577,9 +639,8 @@ body.no-toc-empty .toc-toggle { display: none; }
     ${description ? `<div class="desc">${escapeHtml(description)}</div>` : ""}
   </div>
   <div class="topbar-right">
-    <span class="meta" id="annotation-count-top" aria-live="polite">0 annotations</span>
-    <button class="btn" id="toggle" type="button">dark</button>
-    <button class="btn" id="sub-top" type="button">Submit</button>
+    <button class="btn" id="export-pdf" type="button">Export PDF</button>
+    <button class="theme-toggle" id="toggle" type="button" title="Toggle theme">◑</button>
   </div>
 </div>
 
@@ -587,7 +648,7 @@ body.no-toc-empty .toc-toggle { display: none; }
 
 <div class="scroll-area" id="scroll-area">
   <div class="content-col" id="content-col">
-    <div id="md-content" contenteditable="plaintext-only" aria-label="Document content" spellcheck="false"></div>
+    <div id="md-content" tabindex="0" role="document" aria-label="Document content" spellcheck="false"></div>
     <div id="annotations-section" hidden>
       <div class="section-divider"><span>Annotations (<span id="annotation-count">0</span>)</span></div>
       <div id="annotations-list"></div>
@@ -601,16 +662,18 @@ body.no-toc-empty .toc-toggle { display: none; }
 </div>
 
 <div class="botbar">
-  <span class="kbd">\u2318\u21B5 submit \u00b7 c/a annotate \u00b7 n/p next/prev \u00b7 e edit \u00b7 d delete \u00b7 [ sidebar</span>
+  <span class="kbd">\u2318\u21B5 submit \u00b7 c/a annotate \u00b7 \u2325\u21B5 edit \u00b7 y/n accept or reject edit \u00b7 n/p next/prev \u00b7 e edit \u00b7 d delete \u00b7 [ sidebar</span>
   <button class="btn" id="sub" type="button">Submit</button>
 </div>
 
+  <button id="sel-action" class="sel-action" type="button">Comment</button>
   <div id="popup" class="popup">
   <div class="popup-quote" id="popup-quote"></div>
   <textarea class="popup-text" id="popup-text" rows="2" placeholder="Write a note or question\u2026"></textarea>
   <div class="popup-actions">
     <button class="btn popup-btn-cancel" id="popup-cancel" type="button">Cancel</button>
     <span style="flex:1"></span>
+    <button class="btn" id="popup-edit-action" type="button">Edit \u2325\u21B5</button>
     <button class="btn" id="popup-ask-action" type="button">Ask \u2318\u21B5</button>
     <button class="btn popup-btn-primary" id="popup-comment-action" type="button">Comment \u21B5</button>
   </div>
@@ -632,6 +695,7 @@ body.no-toc-empty .toc-toggle { display: none; }
       edits: [],
       general_feedback: "",
       pending_interaction_id: null,
+      pending_edit_id: null,
     }
   )};
 
@@ -642,26 +706,34 @@ body.no-toc-empty .toc-toggle { display: none; }
   const popup = document.getElementById("popup");
   const popupQuote = document.getElementById("popup-quote");
   const popupText = document.getElementById("popup-text");
+  const popupEditAction = document.getElementById("popup-edit-action");
   const popupCommentAction = document.getElementById("popup-comment-action");
   const popupAskAction = document.getElementById("popup-ask-action");
   const popupCancel = document.getElementById("popup-cancel");
   const annotationsList = document.getElementById("annotations-list");
   const annotationsSection = document.getElementById("annotations-section");
   const annotationCountEl = document.getElementById("annotation-count");
-  const annotationCountTop = document.getElementById("annotation-count-top");
   const generalFeedback = document.getElementById("general-feedback");
   const overlay = document.getElementById("overlay");
   const toggle = document.getElementById("toggle");
   const sub = document.getElementById("sub");
-  const subTop = document.getElementById("sub-top");
+  const exportPdfBtn = document.getElementById("export-pdf");
+  const selActionBtn = document.getElementById("sel-action");
   const MAX_SSE_FAILURES = 5;
 
   let comments = [];
   let questions = [];
+  let edits = [];
   let sent = false;
   let currentRange = null;
   let activeInteractionId = null;
-  let pendingInteractionId = hydration.pending_interaction_id || null;
+  function normalizePendingId(value) {
+    const text = typeof value === "string" ? value.trim() : "";
+    return text || null;
+  }
+
+  let pendingInteractionId = normalizePendingId(hydration.pending_interaction_id);
+  let pendingEditId = normalizePendingId(hydration.pending_edit_id);
   let feedbackSyncTimer = null;
   let eventSource = null;
   let reviewClosed = false;
@@ -670,6 +742,7 @@ body.no-toc-empty .toc-toggle { display: none; }
   let connectionStatus = "";
   let nextCommentNumber = 1;
   let nextQuestionNumber = 1;
+  let nextEditNumber = 1;
 
   function trunc(s, n) {
     return s.length > n ? s.slice(0, n) + "\\u2026" : s;
@@ -708,9 +781,9 @@ body.no-toc-empty .toc-toggle { display: none; }
     return {
       offset_start: start,
       offset_end: end,
-      surrounding_context: String(anchor && anchor.surrounding_context || ""),
-      selected_text: String(anchor && anchor.selected_text || ""),
-      section: String(anchor && anchor.section || ""),
+      surrounding_context: String(anchor?.surrounding_context ?? ""),
+      selected_text: String(anchor?.selected_text ?? ""),
+      section: String(anchor?.section ?? ""),
     };
   }
 
@@ -719,9 +792,32 @@ body.no-toc-empty .toc-toggle { display: none; }
       interaction_id: String(comment && comment.interaction_id || makeId("comment")),
       badge_label: String(comment && comment.badge_label || nextCommentNumber++),
       anchor: normalizeAnchor(comment && comment.anchor),
-      comment: String(comment && comment.comment || ""),
+      comment: String(comment?.comment ?? ""),
       _editing: false,
       _collapsed: false,
+    };
+  }
+
+  function normalizeEdit(edit) {
+    let status = String(edit && edit.status || "");
+    const hasProposal =
+      !!edit && Object.prototype.hasOwnProperty.call(edit, "proposed_replacement");
+    if (!status) {
+      if (edit && edit.accepted === true) status = "accepted";
+      else if (edit && edit.accepted === false) status = "rejected";
+      else if (hasProposal) status = "proposed";
+      else status = "pending";
+    }
+
+    return {
+      interaction_id: String(edit && edit.interaction_id || makeId("edit")),
+      badge_label: String(edit && edit.badge_label || ("E" + nextEditNumber++)),
+      anchor: normalizeAnchor(edit && edit.anchor),
+      selected_text: String(edit && (edit.selected_text || edit.anchor && edit.anchor.selected_text) || ""),
+      instruction: String(edit?.instruction ?? ""),
+      proposed_replacement: String(edit?.proposed_replacement ?? ""),
+      status: status,
+      _collapsed: status === "accepted",
     };
   }
 
@@ -733,9 +829,9 @@ body.no-toc-empty .toc-toggle { display: none; }
         ? String(entry.parent_interaction_id)
         : null,
       kind: kind,
-      question: kind === "question" ? String(entry && (entry.question || entry.content) || "") : "",
-      content: kind === "note" ? String(entry && (entry.content || entry.question) || "") : "",
-      answer: kind === "question" ? String(entry && entry.answer || "") : "",
+      question: kind === "question" ? String(entry ? (entry.question ?? entry.content) : "") : "",
+      content: kind === "note" ? String(entry ? (entry.content ?? entry.question) : "") : "",
+      answer: kind === "question" ? String(entry?.answer ?? "") : "",
     };
   }
 
@@ -765,7 +861,7 @@ body.no-toc-empty .toc-toggle { display: none; }
 
   function getThreadEntryText(entry) {
     if (!entry) return "";
-    return entry.kind === "note" ? String(entry.content || "") : String(entry.question || "");
+    return entry.kind === "note" ? String(entry.content ?? "") : String(entry.question ?? "");
   }
 
   function getFirstQuestionEntry(questionThread) {
@@ -891,25 +987,54 @@ body.no-toc-empty .toc-toggle { display: none; }
 
   function getDocumentText() {
     const clone = contentEl.cloneNode(true);
-    clone.querySelectorAll(".badge").forEach(function(el) { el.remove(); });
+    clone.querySelectorAll(".badge, .diff-ins").forEach(function(el) { el.remove(); });
     return clone.textContent || "";
   }
 
   function getPlainRangeText(range) {
     const fragment = range.cloneContents();
     if (fragment.querySelectorAll) {
-      fragment.querySelectorAll(".badge").forEach(function(el) { el.remove(); });
+      fragment.querySelectorAll(".badge, .diff-ins").forEach(function(el) { el.remove(); });
     }
     return fragment.textContent || "";
+  }
+
+  function selectionTouchesContent(selection) {
+    if (!selection || selection.rangeCount === 0) return false;
+    const anchorNode = selection.anchorNode;
+    const focusNode = selection.focusNode;
+    if (!anchorNode || !focusNode) return false;
+    return contentEl.contains(anchorNode) || contentEl.contains(focusNode);
+  }
+
+  function isIgnoredTextNode(node) {
+    let el = node && node.nodeType === 3 ? node.parentNode : node;
+    while (el && el !== contentEl) {
+      if (el.classList && (el.classList.contains("badge") || el.classList.contains("diff-ins"))) {
+        return true;
+      }
+      el = el.parentNode;
+    }
+    return false;
   }
 
   function getCommentById(interactionId) {
     return comments.find(function(comment) { return comment.interaction_id === interactionId; }) || null;
   }
 
+  function getEditById(interactionId) {
+    return edits.find(function(edit) { return edit.interaction_id === interactionId; }) || null;
+  }
+
   function getActiveEditableComment() {
     if (!activeInteractionId) return null;
     return getCommentById(activeInteractionId);
+  }
+
+  function getActiveEditableEdit() {
+    const edit = activeInteractionId ? getEditById(activeInteractionId) : null;
+    if (!edit || edit.status !== "proposed") return null;
+    return edit;
   }
 
   function getAllInteractions() {
@@ -937,6 +1062,19 @@ body.no-toc-empty .toc-toggle { display: none; }
         pending: isQuestionThreadPending(question),
       });
     });
+    edits.forEach(function(edit) {
+      items.push({
+        kind: "edit",
+        interaction_id: edit.interaction_id,
+        badge_label: edit.badge_label,
+        anchor: edit.anchor,
+        selected_text: edit.selected_text,
+        instruction: edit.instruction,
+        proposed_replacement: edit.proposed_replacement,
+        status: edit.status,
+        collapsed: edit._collapsed === true,
+      });
+    });
     items.sort(function(a, b) {
       return a.anchor.offset_start - b.anchor.offset_start;
     });
@@ -944,11 +1082,37 @@ body.no-toc-empty .toc-toggle { display: none; }
   }
 
   function canStartAsk() {
-    return !reviewClosed && !pendingInteractionId && !sseStopped;
+    return canStartAgentInteraction();
+  }
+
+  function canStartEdit() {
+    return canStartAgentInteraction();
+  }
+
+  function hasPendingAgentInteraction() {
+    return !!(pendingInteractionId || pendingEditId);
+  }
+
+  function canStartAgentInteraction() {
+    return !reviewClosed && !hasPendingAgentInteraction() && !sseStopped;
+  }
+
+  function getBlockedActionReason() {
+    if (reviewClosed) return "closed";
+    if (hasPendingAgentInteraction()) return "waiting";
+    if (sseStopped) return "offline";
+    return "";
   }
 
   function updatePopupActions() {
-    popupAskAction.disabled = !canStartAsk();
+    const askBlocked = getBlockedActionReason();
+    const editBlocked = getBlockedActionReason();
+
+    popupAskAction.disabled = !!askBlocked;
+    popupEditAction.disabled = !!editBlocked;
+
+    popupAskAction.textContent = askBlocked ? "Ask (" + askBlocked + ")" : "Ask \u2318\u21B5";
+    popupEditAction.textContent = editBlocked ? "Edit (" + editBlocked + ")" : "Edit \u2325\u21B5";
   }
 
   async function postEvent(payload) {
@@ -1040,7 +1204,7 @@ body.no-toc-empty .toc-toggle { display: none; }
       const questionThread = getQuestionThreadByEntryId(event.interaction_id);
       const questionEntry = getQuestionEntryById(event.interaction_id);
       if (!questionThread || !questionEntry) return;
-      questionEntry.answer = String(event.content || "");
+      questionEntry.answer = String(event.content ?? "");
       questionThread._collapsed = false;
       questionThread._composerOpen = false;
       questionThread._composerValue = "";
@@ -1051,14 +1215,28 @@ body.no-toc-empty .toc-toggle { display: none; }
       return;
     }
 
+    if (event.type === "edit_proposal") {
+      const edit = getEditById(event.interaction_id);
+      if (!edit) return;
+      edit.proposed_replacement = String(event.content ?? "");
+      edit.status = "proposed";
+      edit._collapsed = false;
+      if (pendingEditId === edit.interaction_id) {
+        pendingEditId = null;
+      }
+      renderEditMarks(edit);
+      updateUI();
+      return;
+    }
+
     if (event.type === "session_closed") {
       reviewClosed = true;
       sseStopped = true;
       pendingInteractionId = null;
+      pendingEditId = null;
       connectionStatus = "";
       stopEventSource();
       sub.disabled = true;
-      subTop.disabled = true;
       updateUI();
       if (!sent) {
         showOverlayMessage("Review session closed.", "You can close this tab.");
@@ -1068,7 +1246,7 @@ body.no-toc-empty .toc-toggle { display: none; }
 
   function setTheme(t) {
     document.documentElement.setAttribute("data-theme", t);
-    toggle.textContent = t === "dark" ? "light" : "dark";
+    toggle.textContent = "\u25D1";
     try { localStorage.setItem("wft", t); } catch(e) {}
   }
   toggle.addEventListener("click", function() {
@@ -1076,6 +1254,8 @@ body.no-toc-empty .toc-toggle { display: none; }
     setTheme(current === "dark" ? "light" : "dark");
   });
   try { const saved = localStorage.getItem("wft"); if (saved) setTheme(saved); } catch(e) {}
+
+  exportPdfBtn.addEventListener("click", function() { window.print(); });
 
   const tocToggle = document.getElementById("toc-toggle");
   let tocHidden = true;
@@ -1087,11 +1267,6 @@ body.no-toc-empty .toc-toggle { display: none; }
   }
   tocToggle.addEventListener("click", function() { setTocVisible(tocHidden); });
   try { if (localStorage.getItem("wft-toc") === "1") setTocVisible(true); else setTocVisible(false); } catch(e) { setTocVisible(false); }
-
-  contentEl.addEventListener("beforeinput", function(e) { e.preventDefault(); });
-  contentEl.addEventListener("paste", function(e) { e.preventDefault(); });
-  contentEl.addEventListener("cut", function(e) { e.preventDefault(); });
-  contentEl.addEventListener("drop", function(e) { e.preventDefault(); });
 
   try {
     if (!renderedHtml) throw 0;
@@ -1154,7 +1329,7 @@ body.no-toc-empty .toc-toggle { display: none; }
     r.setEnd(container, offset);
     const fragment = r.cloneContents();
     if (fragment.querySelectorAll) {
-      fragment.querySelectorAll(".badge").forEach(function(el) { el.remove(); });
+      fragment.querySelectorAll(".badge, .diff-ins").forEach(function(el) { el.remove(); });
     }
     return (fragment.textContent || "").length;
   }
@@ -1193,13 +1368,15 @@ body.no-toc-empty .toc-toggle { display: none; }
     };
   }
 
-  function wrapMark(textNode, interactionId, badgeLabel, isFirst) {
+  function wrapMark(textNode, interactionId, badgeLabel, isFirst, className) {
     const mark = document.createElement("mark");
-    mark.className = "hl";
-    mark.dataset.key = interactionId;
+    mark.className = className;
+    if (interactionId) {
+      mark.dataset.key = interactionId;
+    }
     textNode.parentNode.insertBefore(mark, textNode);
     mark.appendChild(textNode);
-    if (isFirst) {
+    if (isFirst && badgeLabel) {
       const badge = document.createElement("span");
       badge.className = "badge";
       badge.textContent = badgeLabel;
@@ -1207,7 +1384,69 @@ body.no-toc-empty .toc-toggle { display: none; }
     }
   }
 
-  function highlightRange(range, interactionId, badgeLabel) {
+  function getFirstTextNodeInSubtree(node) {
+    if (!node) return null;
+    if (node.nodeType === 3) {
+      return isIgnoredTextNode(node) ? null : node;
+    }
+
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode;
+      if (!isIgnoredTextNode(textNode)) {
+        return textNode;
+      }
+    }
+    return null;
+  }
+
+  function getLastTextNodeInSubtree(node) {
+    if (!node) return null;
+    if (node.nodeType === 3) {
+      return isIgnoredTextNode(node) ? null : node;
+    }
+
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    let last = null;
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode;
+      if (!isIgnoredTextNode(textNode)) {
+        last = textNode;
+      }
+    }
+    return last;
+  }
+
+  function getNextTextNodeAfter(node) {
+    if (!node) return null;
+    const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode;
+      if (isIgnoredTextNode(textNode)) continue;
+      if (node.contains && node.contains(textNode)) continue;
+      if (node !== textNode && (node.compareDocumentPosition(textNode) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+        return textNode;
+      }
+    }
+    return null;
+  }
+
+  function getPreviousTextNodeBefore(node) {
+    if (!node) return null;
+    const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
+    let previous = null;
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode;
+      if (isIgnoredTextNode(textNode)) continue;
+      if (node.contains && node.contains(textNode)) continue;
+      if (node !== textNode && (node.compareDocumentPosition(textNode) & Node.DOCUMENT_POSITION_PRECEDING)) {
+        previous = textNode;
+      }
+    }
+    return previous;
+  }
+
+  function highlightRangeWithClass(range, interactionId, badgeLabel, className) {
     let startC = range.startContainer;
     let endC = range.endContainer;
     let startO = range.startOffset;
@@ -1216,29 +1455,21 @@ body.no-toc-empty .toc-toggle { display: none; }
     if (startC.nodeType !== 3) {
       const children = startC.childNodes;
       if (startO < children.length) {
-        const tw = document.createTreeWalker(children[startO], NodeFilter.SHOW_TEXT);
-        const first = tw.nextNode();
+        const first = getFirstTextNodeInSubtree(children[startO]);
         if (first) { startC = first; startO = 0; }
       } else {
-        const tw = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
-        tw.currentNode = startC;
-        const next = tw.nextNode();
+        const next = getNextTextNodeAfter(startC);
         if (next) { startC = next; startO = 0; }
       }
     }
     if (endC.nodeType !== 3) {
       const children = endC.childNodes;
       if (endO > 0 && endO <= children.length) {
-        const target = children[endO - 1];
-        const tw = document.createTreeWalker(target, NodeFilter.SHOW_TEXT);
-        let last = null;
-        while (tw.nextNode()) last = tw.currentNode;
+        const last = getLastTextNodeInSubtree(children[endO - 1]);
         if (last) { endC = last; endO = last.textContent.length; }
       } else if (endO === 0) {
-        const tw = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
-        tw.currentNode = endC;
-        const next = tw.nextNode();
-        if (next) { endC = next; endO = 0; }
+        const previous = getPreviousTextNodeBefore(endC);
+        if (previous) { endC = previous; endO = previous.textContent.length; }
       }
     }
 
@@ -1246,7 +1477,7 @@ body.no-toc-empty .toc-toggle { display: none; }
       if (startO === endO) return;
       const mid = startC.splitText(startO);
       mid.splitText(endO - startO);
-      wrapMark(mid, interactionId, badgeLabel, true);
+      wrapMark(mid, interactionId, badgeLabel, true, className);
       return;
     }
 
@@ -1259,7 +1490,7 @@ body.no-toc-empty .toc-toggle { display: none; }
 
     while (walker.nextNode()) {
       const node = walker.currentNode;
-      if (node.parentNode.classList && node.parentNode.classList.contains("badge")) continue;
+      if (isIgnoredTextNode(node)) continue;
       if (node === startC) {
         inRange = true;
         const info = { node: node, start: startO, end: node.textContent.length };
@@ -1282,7 +1513,7 @@ body.no-toc-empty .toc-toggle { display: none; }
       let target;
       if (s > 0) { target = node.splitText(s); } else { target = node; }
       if (e < nodeLen) { target.splitText(e - s); }
-      wrapMark(target, interactionId, badgeLabel, i === 0);
+      wrapMark(target, interactionId, badgeLabel, i === 0, className);
     }
   }
 
@@ -1298,7 +1529,19 @@ body.no-toc-empty .toc-toggle { display: none; }
     });
   }
 
-  function applyHighlightFromOffsets(startOff, endOff, interactionId, badgeLabel) {
+  function removeEditHighlight(interactionId) {
+    const marks = contentEl.querySelectorAll('mark.hl-edit[data-key="' + interactionId + '"]');
+    marks.forEach(function(mark) {
+      const badge = mark.querySelector(".badge");
+      if (badge) badge.remove();
+      const parent = mark.parentNode;
+      while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+      parent.removeChild(mark);
+      parent.normalize();
+    });
+  }
+
+  function applyHighlightFromOffsets(startOff, endOff, interactionId, badgeLabel, className) {
     const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
     let pos = 0;
     let startNode;
@@ -1308,7 +1551,7 @@ body.no-toc-empty .toc-toggle { display: none; }
 
     while (walker.nextNode()) {
       const node = walker.currentNode;
-      if (node.parentNode.classList && node.parentNode.classList.contains("badge")) continue;
+      if (isIgnoredTextNode(node)) continue;
       const len = node.textContent.length;
       if (!startNode && pos + len > startOff) { startNode = node; startNodeOff = startOff - pos; }
       if (pos + len >= endOff) { endNode = node; endNodeOff = endOff - pos; break; }
@@ -1320,32 +1563,40 @@ body.no-toc-empty .toc-toggle { display: none; }
         const r = document.createRange();
         r.setStart(startNode, Math.min(startNodeOff, startNode.textContent.length));
         r.setEnd(endNode, Math.min(endNodeOff, endNode.textContent.length));
-        highlightRange(r, interactionId, badgeLabel);
+        highlightRangeWithClass(r, interactionId, badgeLabel, className || "hl");
       } catch(e) {}
     }
   }
 
+  function highlightAnchor(anchor, interactionId, badgeLabel, className) {
+    if (!anchor) return;
+    applyHighlightFromOffsets(
+      anchor.offset_start,
+      anchor.offset_end,
+      interactionId,
+      badgeLabel,
+      className || "hl"
+    );
+  }
+
   function restoreHighlights() {
+    edits
+      .slice()
+      .sort(function(a, b) { return a.anchor.offset_start - b.anchor.offset_start; })
+      .forEach(function(edit) {
+        highlightAnchor(edit.anchor, edit.interaction_id, edit.badge_label, "hl-edit");
+        renderEditMarks(edit);
+      });
     comments.forEach(function(comment) {
-      applyHighlightFromOffsets(
-        comment.anchor.offset_start,
-        comment.anchor.offset_end,
-        comment.interaction_id,
-        comment.badge_label
-      );
+      highlightAnchor(comment.anchor, comment.interaction_id, comment.badge_label, "hl");
     });
     questions.forEach(function(question) {
-      applyHighlightFromOffsets(
-        question.anchor.offset_start,
-        question.anchor.offset_end,
-        question.interaction_id,
-        question.badge_label
-      );
+      highlightAnchor(question.anchor, question.interaction_id, question.badge_label, "hl");
     });
   }
 
   function placeCursorAtInteraction(interactionId) {
-    const mark = contentEl.querySelector('mark.hl[data-key="' + interactionId + '"]');
+    const mark = contentEl.querySelector('mark[data-key="' + interactionId + '"]');
     if (!mark) return;
     const sel = window.getSelection();
     const range = document.createRange();
@@ -1363,7 +1614,7 @@ body.no-toc-empty .toc-toggle { display: none; }
       card.classList.toggle("active", card.dataset.key === interactionId);
     });
 
-    contentEl.querySelectorAll("mark.hl").forEach(function(mark) {
+    contentEl.querySelectorAll("mark.hl, mark.hl-edit").forEach(function(mark) {
       mark.classList.toggle("hl-active", mark.dataset.key === interactionId);
     });
 
@@ -1378,7 +1629,7 @@ body.no-toc-empty .toc-toggle { display: none; }
 
     cards.forEach(function(card) {
       const interactionId = card.dataset.key;
-      const mark = contentEl.querySelector('mark.hl[data-key="' + interactionId + '"]');
+      const mark = contentEl.querySelector('mark[data-key="' + interactionId + '"]');
       positions.push({ card: card, top: mark ? mark.offsetTop : 0 });
     });
 
@@ -1396,7 +1647,7 @@ body.no-toc-empty .toc-toggle { display: none; }
       let pb = 0;
       positions.forEach(function(position) {
         const interactionId = position.card.dataset.key;
-        const mark = contentEl.querySelector('mark.hl[data-key="' + interactionId + '"]');
+        const mark = contentEl.querySelector('mark[data-key="' + interactionId + '"]');
         const markTop = mark ? mark.offsetTop : 0;
         const top = Math.max(markTop, pb);
         position.card.style.top = top + "px";
@@ -1409,6 +1660,90 @@ body.no-toc-empty .toc-toggle { display: none; }
     return '<button class="card-toggle" type="button" aria-label="' + (collapsed ? "Expand" : "Collapse") + '">' +
       (collapsed ? "\u25B8" : "\u25BE") +
       "</button>";
+  }
+
+  function getMarksForInteraction(interactionId, className) {
+    return Array.from(contentEl.querySelectorAll('mark[data-key="' + interactionId + '"]')).filter(function(mark) {
+      return !className || mark.classList.contains(className);
+    });
+  }
+
+  function getMarkDisplayText(mark) {
+    const clone = mark.cloneNode(true);
+    clone.querySelectorAll(".badge, .diff-ins").forEach(function(el) { el.remove(); });
+    return clone.textContent || "";
+  }
+
+  function replaceMarkContent(mark, buildChildren) {
+    const badge = mark.querySelector(".badge");
+    const badgeClone = badge ? badge.cloneNode(true) : null;
+    while (mark.firstChild) {
+      mark.removeChild(mark.firstChild);
+    }
+    if (badgeClone) {
+      mark.appendChild(badgeClone);
+    }
+    buildChildren(mark);
+  }
+
+  function renderEditMarks(edit) {
+    const marks = getMarksForInteraction(edit.interaction_id, "hl-edit");
+    if (!marks.length) return;
+
+    marks.forEach(function(mark) {
+      mark.classList.remove("hl-edit-pending", "hl-edit-proposed", "hl-edit-accepted", "hl-edit-rejected");
+    });
+
+    if (edit.status === "accepted") {
+      const firstMark = marks[0];
+      replaceMarkContent(firstMark, function(mark) {
+        mark.appendChild(document.createTextNode(edit.proposed_replacement ?? ""));
+      });
+      firstMark.classList.add("hl-edit-accepted");
+
+      marks.slice(1).forEach(function(mark) {
+        const parent = mark.parentNode;
+        if (parent) {
+          parent.removeChild(mark);
+          parent.normalize();
+        }
+      });
+      return;
+    }
+
+    marks.forEach(function(mark, index) {
+      const originalText = getMarkDisplayText(mark);
+      replaceMarkContent(mark, function(target) {
+        if (edit.status === "proposed") {
+          const deleted = document.createElement("span");
+          deleted.className = "diff-del";
+          deleted.textContent = originalText;
+          target.appendChild(deleted);
+
+          if (index === marks.length - 1 && edit.proposed_replacement) {
+            const inserted = document.createElement("span");
+            inserted.className = "diff-ins";
+            inserted.textContent = edit.proposed_replacement;
+            target.appendChild(inserted);
+          }
+          return;
+        }
+
+        target.appendChild(document.createTextNode(originalText));
+      });
+
+      mark.classList.add(
+        edit.status === "rejected"
+          ? "hl-edit-rejected"
+          : edit.status === "proposed"
+            ? "hl-edit-proposed"
+            : "hl-edit-pending"
+      );
+    });
+  }
+
+  function getEditReplacementLabel(edit) {
+    return edit.proposed_replacement ? edit.proposed_replacement : "[remove]";
   }
 
   function buildInlineActionMarkup(options) {
@@ -1463,6 +1798,66 @@ body.no-toc-empty .toc-toggle { display: none; }
       '<span class="action-sep">\u00b7</span>' +
       '<button class="text-action action-delete card-delete" type="button">Delete</button>' +
       "</div>";
+  }
+
+  function buildEditCardHtml(edit) {
+    const canCollapse = edit.status === "accepted";
+    const summary = edit.proposed_replacement
+      ? trunc(edit.selected_text, 32) + " \u2192 " + trunc(edit.proposed_replacement, 32)
+      : trunc(edit.selected_text, 32) + " \u2192 [remove]";
+
+    if (edit._collapsed && canCollapse) {
+      return '<div class="card-collapsed-line">' +
+        '<span class="badge">' + esc(edit.badge_label) + '</span>' +
+        '<span class="card-collapsed-text">' + esc(summary) + '</span>' +
+        buildToggleMarkup(true) +
+        "</div>";
+    }
+
+    let html = '<div class="card-head">' +
+      '<div class="card-head-main">' +
+      '<span class="badge">' + esc(edit.badge_label) + '</span>' +
+      '<div class="card-quote">' + esc(trunc(edit.anchor.selected_text, 40)) + '</div>' +
+      "</div>" +
+      (canCollapse ? buildToggleMarkup(false) : "") +
+      "</div>";
+
+    if (edit.instruction) {
+      html += '<div class="card-body">' + esc(edit.instruction) + "</div>";
+    }
+
+    if (edit.status === "pending") {
+      html += '<div class="card-loading">Generating edit\u2026</div>';
+      return html;
+    }
+
+    if (edit.status === "proposed") {
+      html += '<div class="edit-summary"><span class="diff-del">' + esc(edit.selected_text) + '</span>' +
+        (edit.proposed_replacement
+          ? '<span class="diff-ins">' + esc(edit.proposed_replacement) + "</span>"
+          : '<span class="edit-state">Remove selected text.</span>') +
+        "</div>";
+      html += '<div class="inline-actions">' +
+        '<button class="text-action primary card-accept" type="button">Accept</button>' +
+        '<span class="action-sep">\u00b7</span>' +
+        '<button class="text-action action-delete card-reject" type="button">Reject</button>' +
+        "</div>";
+      return html;
+    }
+
+    if (edit.status === "accepted") {
+      html += '<div class="edit-state">' + (edit.proposed_replacement ? "Applied." : "Removed.") + "</div>";
+      html += '<div class="edit-summary">' +
+        (edit.proposed_replacement
+          ? '<span class="diff-ins">' + esc(edit.proposed_replacement) + "</span>"
+          : '<span class="edit-state">Selected text removed.</span>') +
+        "</div>";
+      return html;
+    }
+
+    html += '<div class="edit-state">Rejected.</div>';
+    html += '<div class="edit-summary"><span class="diff-del">' + esc(edit.selected_text) + "</span></div>";
+    return html;
   }
 
   function buildThreadGroupHtml(entry) {
@@ -1530,7 +1925,8 @@ body.no-toc-empty .toc-toggle { display: none; }
 
     getAllInteractions().forEach(function(item) {
       const card = document.createElement("div");
-      card.className = "margin-card " + (item.kind === "question" ? "thread-card" : "comment-card") +
+      card.className = "margin-card " +
+        (item.kind === "question" ? "thread-card" : item.kind === "edit" ? "edit-card" : "comment-card") +
         (item.interaction_id === activeInteractionId ? " active" : "");
       card.dataset.key = item.interaction_id;
       card.dataset.kind = item.kind;
@@ -1539,10 +1935,14 @@ body.no-toc-empty .toc-toggle { display: none; }
         const comment = getCommentById(item.interaction_id);
         if (!comment) return;
         card.innerHTML = buildCommentCardHtml(comment);
-      } else {
+      } else if (item.kind === "question") {
         const questionThread = getQuestionThreadById(item.interaction_id);
         if (!questionThread) return;
         card.innerHTML = buildQuestionCardHtml(questionThread);
+      } else if (item.kind === "edit") {
+        const edit = getEditById(item.interaction_id);
+        if (!edit) return;
+        card.innerHTML = buildEditCardHtml(edit);
       }
 
       marginCol.appendChild(card);
@@ -1556,6 +1956,19 @@ body.no-toc-empty .toc-toggle { display: none; }
       return trunc(item.comment, 72);
     }
 
+    if (item.kind === "edit") {
+      if (item.status === "pending") {
+        return "Generating edit\u2026";
+      }
+      if (item.status === "accepted") {
+        return trunc(item.proposed_replacement ? "Applied: " + item.proposed_replacement : "Applied: [remove]", 96);
+      }
+      if (item.status === "rejected") {
+        return trunc("Rejected: " + item.selected_text, 96);
+      }
+      return trunc(item.selected_text + " \u2192 " + getEditReplacementLabel(item), 96);
+    }
+
     const questionThread = getQuestionThreadById(item.interaction_id);
     const firstEntry = getFirstQuestionEntry(questionThread);
     return trunc((firstEntry ? getThreadEntryText(firstEntry) : "") + " \u2192 " + getThreadMessageCount(questionThread) + " messages", 96);
@@ -1566,11 +1979,6 @@ body.no-toc-empty .toc-toggle { display: none; }
     const annotationCount = annotations.length;
 
     annotationCountEl.textContent = annotationCount;
-    let topText = annotationCount + " annotation" + (annotationCount !== 1 ? "s" : "");
-    if (connectionStatus) {
-      topText += " · " + connectionStatus;
-    }
-    annotationCountTop.textContent = topText;
 
     annotationsSection.hidden = annotationCount === 0;
 
@@ -1608,36 +2016,14 @@ body.no-toc-empty .toc-toggle { display: none; }
 
   function applyPendingHighlight(range) {
     try {
-      // Collect text nodes in range
-      var textNodes = [];
-      var walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT, null);
-      var node;
-      var inRange = false;
-      while ((node = walker.nextNode())) {
-        if (node === range.startContainer) inRange = true;
-        if (inRange) textNodes.push(node);
-        if (node === range.endContainer) break;
-      }
-      if (textNodes.length === 0) return;
-
-      // Wrap each text node's selected portion
-      for (var i = 0; i < textNodes.length; i++) {
-        var tn = textNodes[i];
-        var start = (tn === range.startContainer) ? range.startOffset : 0;
-        var end = (tn === range.endContainer) ? range.endOffset : tn.length;
-        if (start >= end) continue;
-        var mid = tn;
-        if (start > 0) mid = tn.splitText(start);
-        if (end - start < mid.length) mid.splitText(end - start);
-        var mark = document.createElement("mark");
-        mark.className = "hl-pending";
-        mid.parentNode.insertBefore(mark, mid);
-        mark.appendChild(mid);
-      }
+      const anchor = buildAnchorFromRange(range);
+      highlightAnchor(anchor, null, null, "hl-pending");
     } catch(e) {}
   }
 
   function showPopup(range) {
+    if (reviewClosed) return;
+    hideSelAction();
     currentRange = range.cloneRange();
     const rect = range.getBoundingClientRect();
     popup.style.left = Math.min(rect.right + 4, window.innerWidth - 240) + "px";
@@ -1670,7 +2056,7 @@ body.no-toc-empty .toc-toggle { display: none; }
   }
 
   function focusAfterInteraction(interactionId) {
-    const marks = contentEl.querySelectorAll('mark.hl[data-key="' + interactionId + '"]');
+    const marks = contentEl.querySelectorAll('mark[data-key="' + interactionId + '"]');
     if (!marks.length) return;
     const lastMark = marks[marks.length - 1];
     const sel = window.getSelection();
@@ -1695,7 +2081,7 @@ body.no-toc-empty .toc-toggle { display: none; }
     };
 
     comments.push(comment);
-    highlightRange(range, comment.interaction_id, comment.badge_label);
+    highlightAnchor(comment.anchor, comment.interaction_id, comment.badge_label, "hl");
     setActiveInteraction(comment.interaction_id);
     updateUI();
     return comment;
@@ -1790,6 +2176,18 @@ body.no-toc-empty .toc-toggle { display: none; }
     }
 
     questionThread._collapsed = !questionThread._collapsed;
+    renderCards();
+    setActiveInteraction(interactionId);
+  }
+
+  function toggleEditCollapse(interactionId) {
+    const edit = getEditById(interactionId);
+    if (!edit || edit.status !== "accepted") {
+      scrollToInteraction(interactionId);
+      return;
+    }
+
+    edit._collapsed = !edit._collapsed;
     renderCards();
     setActiveInteraction(interactionId);
   }
@@ -1890,6 +2288,100 @@ body.no-toc-empty .toc-toggle { display: none; }
     });
   }
 
+  function commitEdit() {
+    if (!currentRange || !canStartEdit()) return;
+
+    clearPendingHighlight();
+    const anchor = buildAnchorFromRange(currentRange);
+    if (!anchor) return;
+
+    const interactionId = makeId("edit");
+    const edit = {
+      interaction_id: interactionId,
+      badge_label: "E" + (nextEditNumber++),
+      anchor: anchor,
+      selected_text: anchor.selected_text,
+      instruction: popupText.value.trim(),
+      proposed_replacement: "",
+      status: "pending",
+      _collapsed: false,
+    };
+
+    edits.push(edit);
+    pendingEditId = interactionId;
+    highlightAnchor(edit.anchor, interactionId, edit.badge_label, "hl-edit");
+    renderEditMarks(edit);
+    setActiveInteraction(interactionId);
+    updateUI();
+    hidePopup(false);
+    focusAfterInteraction(interactionId);
+    contentEl.focus();
+
+    postEvent({
+      type: "edit_request",
+      interaction_id: edit.interaction_id,
+      badge_label: edit.badge_label,
+      anchor: edit.anchor,
+      selected_text: edit.selected_text,
+      instruction: edit.instruction,
+    }).catch(function(err) {
+      edits = edits.filter(function(entry) { return entry.interaction_id !== interactionId; });
+      pendingEditId = null;
+      removeEditHighlight(interactionId);
+      updateUI();
+      alert("Error: " + err.message);
+    });
+  }
+
+  function acceptEdit(interactionId) {
+    const edit = getEditById(interactionId);
+    if (!edit || edit.status !== "proposed") return;
+
+    const previousStatus = edit.status;
+    edit.status = "accepted";
+    edit._collapsed = true;
+    renderEditMarks(edit);
+    updateUI();
+    setActiveInteraction(interactionId);
+    contentEl.focus();
+
+    postEvent({
+      type: "edit_accept",
+      interaction_id: interactionId,
+      final_document: getDocumentText(),
+    }).catch(function(err) {
+      edit.status = previousStatus;
+      edit._collapsed = false;
+      renderEditMarks(edit);
+      updateUI();
+      alert("Error: " + err.message);
+    });
+  }
+
+  function rejectEdit(interactionId) {
+    const edit = getEditById(interactionId);
+    if (!edit || edit.status !== "proposed") return;
+
+    const previousStatus = edit.status;
+    edit.status = "rejected";
+    edit._collapsed = false;
+    renderEditMarks(edit);
+    updateUI();
+    setActiveInteraction(interactionId);
+    contentEl.focus();
+
+    postEvent({
+      type: "edit_reject",
+      interaction_id: interactionId,
+      final_document: getDocumentText(),
+    }).catch(function(err) {
+      edit.status = previousStatus;
+      renderEditMarks(edit);
+      updateUI();
+      alert("Error: " + err.message);
+    });
+  }
+
   function commitComment() {
     const text = popupText.value.trim();
     if (!text || !currentRange) return;
@@ -1941,7 +2433,7 @@ body.no-toc-empty .toc-toggle { display: none; }
 
     questions.push(question);
     pendingInteractionId = interactionId;
-    highlightRange(currentRange, interactionId, question.badge_label);
+    highlightAnchor(question.anchor, interactionId, question.badge_label, "hl");
     setActiveInteraction(interactionId);
     updateUI();
     hidePopup(false);
@@ -1966,7 +2458,7 @@ body.no-toc-empty .toc-toggle { display: none; }
   function getInteractionMarks() {
     const seen = {};
     const marks = [];
-    contentEl.querySelectorAll("mark.hl").forEach(function(mark) {
+    contentEl.querySelectorAll("mark.hl, mark.hl-edit").forEach(function(mark) {
       const interactionId = mark.dataset.key;
       if (!seen[interactionId]) {
         seen[interactionId] = true;
@@ -1987,7 +2479,7 @@ body.no-toc-empty .toc-toggle { display: none; }
     if (cursorNode) {
       let el = cursorNode.nodeType === 3 ? cursorNode.parentNode : cursorNode;
       while (el && el !== contentEl) {
-        if (el.tagName === "MARK" && el.classList.contains("hl")) {
+        if (el.tagName === "MARK" && (el.classList.contains("hl") || el.classList.contains("hl-edit"))) {
           const interactionId = el.dataset.key;
           for (let i = 0; i < marks.length; i++) {
             if (marks[i].dataset.key === interactionId) { currentIdx = i; break; }
@@ -2023,7 +2515,7 @@ body.no-toc-empty .toc-toggle { display: none; }
   }
 
   function scrollToInteraction(interactionId) {
-    const mark = contentEl.querySelector('mark.hl[data-key="' + interactionId + '"]');
+    const mark = contentEl.querySelector('mark[data-key="' + interactionId + '"]');
     if (!mark) return;
     mark.scrollIntoView({ behavior: "smooth", block: "center" });
     setActiveInteraction(interactionId);
@@ -2047,15 +2539,28 @@ body.no-toc-empty .toc-toggle { display: none; }
         return;
       }
     }
+    if (pendingEditId) {
+      const pendingEdit = getEditById(pendingEditId);
+      const pendingText = pendingEdit && pendingEdit.selected_text
+        ? '"' + trunc(pendingEdit.selected_text, 140) + '"'
+        : "this pending edit";
+      const shouldSubmit = window.confirm(
+        "An edit is still waiting for a proposal:\\n\\n" +
+          pendingText +
+          "\\n\\nSubmit anyway? The pending edit will still be included in the final review."
+      );
+      if (!shouldSubmit) {
+        return;
+      }
+    }
     sent = true;
     sub.disabled = true;
-    subTop.disabled = true;
     sub.textContent = "\\u2026";
-    subTop.textContent = "\\u2026";
 
     postEvent({
       type: "submit",
       general_feedback: generalFeedback.value.trim(),
+      final_document: getDocumentText(),
     })
       .then(function() {
         reviewClosed = true;
@@ -2068,31 +2573,33 @@ body.no-toc-empty .toc-toggle { display: none; }
       .catch(function(err) {
         sent = false;
         sub.disabled = false;
-        subTop.disabled = false;
         sub.textContent = "Submit";
-        subTop.textContent = "Submit";
         alert("Error: " + err.message);
       });
   }
 
   comments = Array.isArray(hydration.comments) ? hydration.comments.map(normalizeComment) : [];
   questions = normalizeQuestions(hydration.questions);
+  edits = Array.isArray(hydration.edits) ? hydration.edits.map(normalizeEdit) : [];
   nextCommentNumber = nextNumberFrom(comments, "") || 1;
   nextQuestionNumber = nextNumberFrom(questions, "Q") || 1;
-  generalFeedback.value = String(hydration.general_feedback || "");
+  nextEditNumber = nextNumberFrom(edits, "E") || 1;
+  generalFeedback.value = String(hydration.general_feedback ?? "");
 
   restoreHighlights();
   updateUI();
   connectEventSource();
 
   document.addEventListener("selectionchange", function() {
-    if (document.activeElement !== contentEl) return;
     const sel = window.getSelection();
-    if (!sel.focusNode) return;
+    if (!selectionTouchesContent(sel)) {
+      setActiveInteraction(null);
+      return;
+    }
 
     let el = sel.focusNode.nodeType === 3 ? sel.focusNode.parentNode : sel.focusNode;
     while (el && el !== contentEl) {
-      if (el.tagName === "MARK" && el.classList.contains("hl")) {
+      if (el.tagName === "MARK" && (el.classList.contains("hl") || el.classList.contains("hl-edit"))) {
         setActiveInteraction(el.dataset.key);
         return;
       }
@@ -2101,16 +2608,49 @@ body.no-toc-empty .toc-toggle { display: none; }
     setActiveInteraction(null);
   });
 
+  function hideSelAction() { selActionBtn.classList.remove("visible"); }
+
   contentEl.addEventListener("mouseup", function() {
+    if (reviewClosed) return;
+    if (popup.classList.contains("visible")) return;
     setTimeout(function() {
       const sel = window.getSelection();
-      if (sel && !sel.isCollapsed && contentEl.contains(sel.anchorNode)) {
-        showPopup(sel.getRangeAt(0));
+      if (sel && !sel.isCollapsed && selectionTouchesContent(sel)) {
+        const rect = sel.getRangeAt(0).getBoundingClientRect();
+        const btnWidth = 70;
+        selActionBtn.style.left = Math.max(8, Math.min(rect.left + (rect.width - btnWidth) / 2, window.innerWidth - btnWidth - 8)) + "px";
+        selActionBtn.style.top = Math.max(8, rect.top - 32) + "px";
+        selActionBtn.classList.add("visible");
+      } else {
+        hideSelAction();
       }
     }, 10);
   });
 
+  selActionBtn.addEventListener("mousedown", function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  selActionBtn.addEventListener("click", function(e) {
+    e.stopPropagation();
+    hideSelAction();
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && selectionTouchesContent(sel)) {
+      showPopup(sel.getRangeAt(0));
+    }
+  });
+
+  document.addEventListener("mousedown", function(e) {
+    if (!selActionBtn.contains(e.target)) hideSelAction();
+  });
+
   popupCommentAction.addEventListener("click", function(e) { e.stopPropagation(); commitComment(); });
+  popupEditAction.addEventListener("click", function(e) {
+    e.stopPropagation();
+    if (canStartEdit()) {
+      commitEdit();
+    }
+  });
   popupAskAction.addEventListener("click", function(e) {
     e.stopPropagation();
     if (canStartAsk()) {
@@ -2125,6 +2665,13 @@ body.no-toc-empty .toc-toggle { display: none; }
       e.stopPropagation();
       if (canStartAsk()) {
         commitQuestion();
+      }
+    }
+    if (e.key === "Enter" && e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (canStartEdit()) {
+        commitEdit();
       }
     }
     if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
@@ -2161,6 +2708,16 @@ body.no-toc-empty .toc-toggle { display: none; }
     if (e.target.closest(".card-toggle")) {
       if (kind === "comment") toggleCommentCollapse(interactionId);
       if (kind === "question") toggleQuestionThread(interactionId);
+      if (kind === "edit") toggleEditCollapse(interactionId);
+      return;
+    }
+
+    if (kind === "edit" && e.target.closest(".card-accept")) {
+      acceptEdit(interactionId);
+      return;
+    }
+    if (kind === "edit" && e.target.closest(".card-reject")) {
+      rejectEdit(interactionId);
       return;
     }
 
@@ -2190,6 +2747,10 @@ body.no-toc-empty .toc-toggle { display: none; }
 
     if (kind === "question" && getQuestionThreadById(interactionId)?._collapsed) {
       toggleQuestionThread(interactionId);
+      return;
+    }
+    if (kind === "edit" && getEditById(interactionId)?._collapsed) {
+      toggleEditCollapse(interactionId);
       return;
     }
     if (kind === "comment" && getCommentById(interactionId)?._collapsed) {
@@ -2271,9 +2832,23 @@ body.no-toc-empty .toc-toggle { display: none; }
     const inTextarea = e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT";
     const inCardEdit = e.target.closest(".card-edit-area");
 
+    if (!e.metaKey && !e.ctrlKey && !e.altKey && !inTextarea && !inCardEdit) {
+      const activeEdit = getActiveEditableEdit();
+      if (activeEdit && e.key === "y") {
+        e.preventDefault();
+        acceptEdit(activeEdit.interaction_id);
+        return;
+      }
+      if (activeEdit && e.key === "n") {
+        e.preventDefault();
+        rejectEdit(activeEdit.interaction_id);
+        return;
+      }
+    }
+
     if (e.key === "c" && !e.metaKey && !e.ctrlKey && !e.altKey && !inTextarea && !inCardEdit) {
       const sel = window.getSelection();
-      if (sel && !sel.isCollapsed && contentEl.contains(sel.anchorNode)) {
+      if (sel && !sel.isCollapsed && selectionTouchesContent(sel)) {
         e.preventDefault();
         showPopup(sel.getRangeAt(0));
       }
@@ -2281,7 +2856,7 @@ body.no-toc-empty .toc-toggle { display: none; }
 
     if (e.key === "a" && !e.metaKey && !e.ctrlKey && !e.altKey && !inTextarea && !inCardEdit) {
       const sel = window.getSelection();
-      if (sel && !sel.isCollapsed && contentEl.contains(sel.anchorNode)) {
+      if (sel && !sel.isCollapsed && selectionTouchesContent(sel)) {
         e.preventDefault();
         showPopup(sel.getRangeAt(0));
       }
@@ -2327,7 +2902,6 @@ body.no-toc-empty .toc-toggle { display: none; }
   });
 
   sub.addEventListener("click", submit);
-  subTop.addEventListener("click", submit);
 
   contentEl.focus();
   window.addEventListener("resize", function() { positionCards(); });

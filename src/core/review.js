@@ -30,6 +30,7 @@ export async function openReview({ title, description, content, filePath }) {
       edits: [],
       general_feedback: "",
       pending_interaction_id: null,
+      pending_edit_id: null,
     },
     renderPage: (hydration) =>
       buildReviewHtml({

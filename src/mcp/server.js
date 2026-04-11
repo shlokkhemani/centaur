@@ -4,10 +4,29 @@ import { log, error as logError } from "../core/logger.js";
 import { buildMcpInputSchema } from "./schema.js";
 import { toolDefinitions } from "../tools/manifest.js";
 
-const server = new McpServer({
-  name: "centaur",
-  version: "0.1.0",
-});
+const server = new McpServer(
+  {
+    name: "centaur",
+    version: "0.1.0",
+  },
+  {
+    instructions: [
+      "Centaur opens browser pages so the human can see, review, and respond to your work visually.",
+      "",
+      "Default tool: review_document.",
+      "Whenever you produce or revise a plan, spec, report, proposal, or any prose document the human",
+      "should read before you proceed — send it through review_document.",
+      "The human can leave inline comments, ask questions, and request edits directly on the rendered",
+      "document; you then respond via respond_to_review until the review is complete.",
+      "Do not paste long documents into chat — open a review instead.",
+      "",
+      "Use ask_questions only when you need structured input (choices, multiple fields) and there is",
+      "no document to review. For a handful of simple questions, regular chat is fine.",
+      "",
+      "Use export_pdf when the human wants a shareable, print-ready document.",
+    ].join("\n"),
+  }
+);
 
 function formatSuccessText(tool, result) {
   switch (tool.resultKind) {
